@@ -191,14 +191,7 @@
     .main{padding:14px 8px;}
   }
   .main-empty{
-    display:flex;
-    flex-direction:column;
-    align-items:center;
-    justify-content:center;
-    height:80vh;
-    color:var(--muted);
-    gap:10px;
-    text-align:center;
+    display:none;
   }
   .main-empty .big{font-size:44px;}
 
@@ -550,7 +543,7 @@
       <button class="add-btn" id="btnEarthlinkOpen" style="flex:1; background:var(--el-blue,#1a56c4); font-size:12.5px; padding:9px 6px;">🌐 فتح صفحة EarthLink</button>
       <button class="add-btn" id="btnEarthlinkResellerApp" style="flex:1; background:var(--el-blue,#1a56c4); font-size:12.5px; padding:9px 6px;">📲 فتح تطبيق وكيل ايرثلنك</button>
     </div>
-    <a href="https://qasmalasdy90.github.io/qasm/" target="_blank" rel="noopener" class="add-btn" style="display:block; text-align:center; text-decoration:none; background:var(--el-pink,#d81b60);">👥 مشتركين قاسم الاسدي</a>
+    <button class="add-btn" id="btnQasmSubscribers" style="display:block; width:100%; background:var(--el-pink,#d81b60);">👥 مشتركين قاسم الاسدي</button>
     <div style="display:flex; gap:6px;">
       <button class="add-btn" id="btnEarthlinkUploadHtml" style="flex:1; background:var(--gold); font-size:12.5px; padding:9px 6px;">📁 رفع ملف HTML ودمج</button>
       <input type="file" id="earthlinkHtmlFile" accept=".html,.htm,text/html" style="display:none;">
@@ -594,10 +587,7 @@
 
   <!-- ===== Main ===== -->
   <div class="main" id="main">
-    <div class="main-empty">
-      <div class="big">📶</div>
-      <div>اختر مشتركاً من القائمة، أو أضف مشتركاً جديداً لإنشاء وصله</div>
-    </div>
+    <div class="main-empty"></div>
   </div>
 </div>
 
@@ -1102,7 +1092,7 @@ function renderMain(){
   }
   const sub = state.subscribers.find(s=>s.id===activeId);
   if(!sub){
-    main.innerHTML = `<div class="main-empty"><div class="big">📶</div><div>اختر مشتركاً من القائمة، أو أضف مشتركاً جديداً لإنشاء وصله</div></div>`;
+    main.innerHTML = `<div class="main-empty"></div>`;
     return;
   }
   if(mode === 'edit'){
@@ -1645,7 +1635,7 @@ function bindForm(sub){
     const price = subTypePrices[e.target.value];
     if(price !== undefined) document.getElementById('f_price').value = price;
   });
-  document.getElementById('btnCancel').onclick = ()=>{ mode = sub?'view':'new'; if(!sub){activeId=null;} mode='view'; if(!sub){document.getElementById('main').innerHTML=`<div class="main-empty"><div class="big">📶</div><div>اختر مشتركاً من القائمة، أو أضف مشتركاً جديداً لإنشاء وصله</div></div>`; return;} render(); };
+  document.getElementById('btnCancel').onclick = ()=>{ mode = sub?'view':'new'; if(!sub){activeId=null;} mode='view'; if(!sub){document.getElementById('main').innerHTML=`<div class="main-empty"></div>`; return;} render(); };
   document.getElementById('btnSave').onclick = async ()=>{
     const isNewSub = !sub;
     const lastPhoto = currentPhoto();
@@ -2429,6 +2419,11 @@ const EARTHLINK_URL = 'https://admin.earthlink.iq/home.aspx';
 
 document.getElementById('btnEarthlinkOpen').addEventListener('click', ()=>{
   location.href = EARTHLINK_URL;
+});
+
+const QASM_SUBSCRIBERS_URL = 'https://qasmalasdy90.github.io/qasm/';
+document.getElementById('btnQasmSubscribers').addEventListener('click', ()=>{
+  location.href = QASM_SUBSCRIBERS_URL;
 });
 
 // يفتح تطبيق "وكيل ايرثلنك" (Earthlink Reseller) نفسه مباشرة لو مثبت
