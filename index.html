@@ -362,6 +362,15 @@
   .reminder-card.kind-renewed .rc-header{ border-bottom-color:var(--ok); }
   .reminder-card.kind-renewed .rc-greeting{ color:var(--ok); }
   .reminder-card.kind-renewed .rc-body b{ color:var(--ok); }
+  .reminder-card.kind-debt{
+    border-color:var(--bad);
+    background:
+      linear-gradient(180deg, rgba(195,63,63,0.08), transparent 160px),
+      var(--paper);
+  }
+  .reminder-card.kind-debt .rc-header{ border-bottom-color:var(--bad); }
+  .reminder-card.kind-debt .rc-greeting{ color:var(--bad); }
+  .reminder-card.kind-debt .rc-body b{ color:var(--bad); }
   .receipt{
     width:100%;
     max-width:600px;
@@ -807,20 +816,32 @@ function hoursLeft(sub){
 function isExpiringSoon(sub){
   return hoursLeft(sub) <= 72;
 }
+// دالة موحّدة لحساب الدين المتبقي على مشترك: الباقي من سعر الاشتراك (سعر - واصل)
+// زائد أي مبلغ دين إضافي مكتوب نصياً بخانة الملاحظات (مثلاً "دين 20").
+// تُستخدم بزر "دين لم يسدد" وبقائمة التذكيرات وبتقرير الأرباح والديون، حتى
+// يكون الرقم نفسه بكل مكان.
+function remainingDebtOf(sub){
+  return Math.max(0,(Number(sub.price)||0) - (Number(sub.paid)||0)) + extractDebtFromNotes(sub.notes);
+}
 function renderReminders(){
   const banner = document.getElementById('remindersBanner');
   if(!banner) return;
   const soon = state.subscribers.filter(isExpiringSoon);
-  if(!soon.length){ banner.innerHTML = ''; return; }
+  const debtors = state.subscribers.filter(s=> remainingDebtOf(s) > 0);
+  if(!soon.length && !debtors.length){ banner.innerHTML = ''; return; }
+  const parts = [];
+  if(soon.length) parts.push(`${soon.length} مشترك قارب اشتراكه على الانتهاء`);
+  if(debtors.length) parts.push(`${debtors.length} عليهم دين لم يسدد`);
   banner.innerHTML = `
     <button type="button" id="btnReminders" style="width:100%; text-align:right; background:#fbf0dd; border:1px solid var(--warn); color:var(--warn); border-radius:9px; padding:9px 12px; font-family:'Tajawal',sans-serif; font-weight:700; font-size:12.5px; cursor:pointer;">
-      🔔 ${soon.length} مشترك قارب اشتراكه على الانتهاء — إرسال تذكير
+      🔔 ${parts.join(' و')} — إرسال تذكير
     </button>`;
   document.getElementById('btnReminders').onclick = openRemindersModal;
 }
 function openRemindersModal(){
   const host = document.getElementById('modalHost');
   const soon = state.subscribers.filter(isExpiringSoon).sort((a,b)=> hoursLeft(a)-hoursLeft(b));
+  const debtors = state.subscribers.filter(s=> remainingDebtOf(s) > 0).sort((a,b)=> remainingDebtOf(b)-remainingDebtOf(a));
   host.innerHTML = `
     <div class="overlay" id="ov">
       <div class="modal">
@@ -849,6 +870,26 @@ function openRemindersModal(){
             </div>
           `;}).join('') : `<div class="hint">لا يوجد مشتركين قريبين من الانتهاء حالياً.</div>`}
         </div>
+        ${debtors.length ? `
+        <h3 style="margin-top:20px;">🔴 مشتركين عليهم دين لم يسدد</h3>
+        <div class="hint">اضغط "إرسال تذكير دين" بجنب أي مشترك — تُجهَّز صورة تذكير باسمه وبمبلغ الدين المتبقي، وتُفتح قائمة المشاركة على واتساب مثل تذكير الانتهاء.</div>
+        <div id="debt_list" style="max-height:50vh; overflow-y:auto; display:flex; flex-direction:column; gap:8px; margin-top:10px;">
+          ${debtors.map(s=>{
+            const remaining = remainingDebtOf(s);
+            const btnHtml = !s.phone
+              ? `<button type="button" class="tbtn" disabled style="white-space:nowrap; opacity:.5; cursor:not-allowed;">🔴 إرسال تذكير دين</button>`
+              : `<button type="button" class="tbtn danger debt-send" data-id="${s.id}" style="white-space:nowrap;">🔴 إرسال تذكير دين</button>`;
+            return `
+            <div style="border:1px solid var(--line); border-radius:9px; padding:10px; display:flex; justify-content:space-between; align-items:center; gap:8px;">
+              <div>
+                <div style="font-weight:700;">${escapeHtml(s.name)}</div>
+                <div class="hint" style="margin:2px 0 0; color:var(--bad);">الدين المتبقي: ${fmtMoney(remaining)} د.ع</div>
+                ${!s.phone ? `<div class="hint" style="margin:2px 0 0; color:var(--bad);">⚠️ لا يوجد رقم هاتف</div>` : ''}
+              </div>
+              ${btnHtml}
+            </div>
+          `;}).join('')}
+        </div>` : ''}
         <div class="modal-actions">
           <button class="tbtn" id="rem_close">إغلاق</button>
         </div>
@@ -862,6 +903,13 @@ function openRemindersModal(){
     if(!btn) return;
     const sub = state.subscribers.find(s=>s.id===btn.dataset.id);
     if(sub) shareCardImage(sub, btn, 'reminder');
+  });
+  const debtList = document.getElementById('debt_list');
+  if(debtList) debtList.addEventListener('click', (e)=>{
+    const btn = e.target.closest('.debt-send');
+    if(!btn) return;
+    const sub = state.subscribers.find(s=>s.id===btn.dataset.id);
+    if(sub) shareCardImage(sub, btn, 'debt');
   });
 }
 
@@ -1175,7 +1223,7 @@ function renderMain(){
       <button class="tbtn" id="btnEdit">تعديل بيانات المشترك</button>
       <button class="tbtn gold" id="btnPrint">🖨 طباعة الوصل</button>
       <button class="tbtn" id="btnShare">📤 مشاركة كصورة (واتساب)</button>
-      <button class="tbtn" id="btnDownloadReceipt">📥 تنزيل الوصل بالهاتف</button>
+      <button class="tbtn" id="btnDebtReminder">🔴 دين لم يسدد</button>
       <button class="tbtn" id="btnWhatsappReminder">⏰ تذكير انتهاء كصورة (واتساب)</button>
       <button class="tbtn" id="btnWhatsappRenewed">✅ تأكيد التجديد كصورة (واتساب)</button>
       <button class="tbtn danger" id="btnDelete">حذف المشترك</button>
@@ -1213,7 +1261,11 @@ function renderMain(){
   document.getElementById('btnEdit').onclick = ()=>{ mode='edit'; render(); };
   document.getElementById('btnPrint').onclick = ()=> window.print();
   document.getElementById('btnShare').onclick = ()=> shareReceiptImage(sub);
-  document.getElementById('btnDownloadReceipt').onclick = ()=> downloadReceiptImage(sub);
+  document.getElementById('btnDebtReminder').onclick = (e)=>{
+    if(!sub.phone){ alert('⚠️ لا يوجد رقم هاتف مسجل لهذا المشترك'); return; }
+    if(remainingDebtOf(sub) <= 0){ alert('✅ هذا المشترك ما عليه دين متبقي.'); return; }
+    shareCardImage(sub, e.currentTarget, 'debt');
+  };
   document.getElementById('btnWhatsappReminder').onclick = (e)=>{
     if(!sub.phone){ alert('⚠️ لا يوجد رقم هاتف مسجل لهذا المشترك'); return; }
     shareCardImage(sub, e.currentTarget, 'reminder');
@@ -1284,28 +1336,6 @@ function downloadBlob(blob, fileName){
   a.remove();
   URL.revokeObjectURL(url);
 }
-// تنزيل مباشر وبسيط لصورة الوصل بجهاز المستخدم — لا يعتمد على navigator.share ولا
-// على نسخ الحافظة، فيشتغل بأي متصفح أو تطبيق APK حتى لو ما دعم المشاركة المباشرة.
-async function downloadReceiptImage(sub){
-  const btn = document.getElementById('btnDownloadReceipt');
-  const originalLabel = btn ? btn.textContent : '';
-  try{
-    if(btn){ btn.textContent = '⏳ جاري تجهيز الصورة...'; btn.disabled = true; }
-    const target = document.querySelector('#printArea .receipt');
-    await waitForFonts();
-    const canvas = await htmlToImage.toCanvas(target, { backgroundColor: '#faf6ee', pixelRatio: 2 });
-    const blob = await new Promise(res=> canvas.toBlob(res, 'image/png', 1));
-    if(!blob){ throw new Error('فشل إنشاء الصورة'); }
-    const fileName = `وصل-${(sub.name||'مشترك').replace(/\s+/g,'_')}-${todayISO()}.png`;
-    downloadBlob(blob, fileName);
-    showSavedToast('📥 المفروض نزلت الصورة بمجلد التنزيلات بهاتفك.', 3500);
-  } catch(err){
-    console.error('download receipt failed', err);
-    alert('⚠️ تعذّر تنزيل صورة الوصل. حاول مرة أخرى.');
-  } finally {
-    if(btn){ btn.textContent = originalLabel; btn.disabled = false; }
-  }
-}
 async function shareReceiptImage(sub){
   const btn = document.getElementById('btnShare');
   const originalLabel = btn.textContent;
@@ -1349,6 +1379,24 @@ async function shareReceiptImage(sub){
 
 function cardTemplate(sub, kind){
   const shop = shopName() || 'قاسم الاسدي للانترنت';
+  if(kind === 'debt'){
+    const remaining = remainingDebtOf(sub);
+    return `
+      <div class="reminder-card kind-debt">
+        <div class="rc-header">
+          <div class="rc-shop">${escapeHtml(shop)}</div>
+          <div class="rc-phone">📞 07705663837</div>
+        </div>
+        <div class="rc-icon">🔴</div>
+        <div class="rc-greeting">عزيزي المشترك ${escapeHtml(sub.name)}</div>
+        <div class="rc-body">
+          تاريخ الاشتراك: <b>${fmtDate(sub.subscriptionDate)}</b><br>
+          يوجد بذمتكم دين لم يسدد بمبلغ: <b>${fmtMoney(remaining)} د.ع</b>
+        </div>
+        <div class="rc-note">يرجى التكرم بتسديد الدين في أقرب وقت ممكن. مع الشكر لتعاونكم.</div>
+        <div class="rc-footer">مكتب ${escapeHtml(shop)} 🌐</div>
+      </div>`;
+  }
   if(kind === 'renewed'){
     return `
       <div class="reminder-card kind-renewed">
@@ -1403,8 +1451,9 @@ async function shareCardImage(sub, btn, kind){
     const canvas = await htmlToImage.toCanvas(host.firstElementChild, { backgroundColor: '#faf6ee', pixelRatio: 2 });
     const blob = await new Promise(res=> canvas.toBlob(res, 'image/png', 1));
     if(!blob){ throw new Error('فشل إنشاء الصورة'); }
-    const what = kind === 'renewed' ? 'تأكيد تجديد' : 'تذكير';
-    const fileName = `${kind === 'renewed' ? 'تأكيد-تجديد' : 'تذكير'}-${(sub.name||'مشترك').replace(/\s+/g,'_')}-${todayISO()}.png`;
+    const what = kind === 'renewed' ? 'تأكيد تجديد' : (kind === 'debt' ? 'تذكير دين' : 'تذكير');
+    const fileNamePrefix = kind === 'renewed' ? 'تأكيد-تجديد' : (kind === 'debt' ? 'تذكير-دين' : 'تذكير');
+    const fileName = `${fileNamePrefix}-${(sub.name||'مشترك').replace(/\s+/g,'_')}-${todayISO()}.png`;
     const file = new File([blob], fileName, { type:'image/png' });
 
     if(navigator.canShare && navigator.canShare({ files:[file] })){
