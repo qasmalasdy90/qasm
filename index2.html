@@ -1182,35 +1182,30 @@ function nextFrame(){
   return new Promise(res=> requestAnimationFrame(()=> requestAnimationFrame(res)));
 }
 
-// الطريقة المفضّلة لمّا navigator.share غير مدعوم بهذا المتصفح/الجهاز: بدل ما نحمّل
-// الصورة ونفتح نافذة يدوية (حفظ ثم إرفاق يدوي)، ننسخ الصورة مباشرة إلى الحافظة
-// (clipboard) ونفتح واتساب مباشرة — على محادثة رقم المشترك نفسه إن كان عنده رقم
-// محفوظ، وإلا نفتح قائمة اختيار جهة اتصال بواتساب نفسه. كل اللي يبقى على المستخدم
-// هو لصق الصورة (اضغط مطولاً بخانة الكتابة ← لصق) وضغط إرسال. يرجّع true إذا نجحت
-// هذي الطريقة، وelse false حتى يرجع المتصل للطريقة القديمة (تحميل + نافذة يدوية)
-// كحل أخير فقط لو الحافظة نفسها غير مدعومة بهذا المتصفح.
-async function copyImageAndOpenWhatsapp(sub, blob){
+// ينسخ الصورة إلى الحافظة (clipboard) بس، بدون ما يفتح أي شي — يستخدمها زر
+// "إرسال واتساب" بالنافذة تحت قبل ما يفتح واتساب، حتى تكون الصورة جاهزة للصق.
+async function copyImageToClipboard(blob){
   try{
     if(!navigator.clipboard || !navigator.clipboard.write || typeof ClipboardItem === 'undefined'){
       return false;
     }
     await navigator.clipboard.write([ new ClipboardItem({ 'image/png': blob }) ]);
+    return true;
   } catch(err){
     console.error('clipboard copy failed', err);
     return false;
   }
-  const num = sub.phone ? toWhatsAppNumber(sub.phone) : '';
-  const waLink = num ? `https://wa.me/${num}` : 'https://api.whatsapp.com/send';
-  window.open(waLink, '_blank', 'noopener');
-  showSavedToast(
-    num
-      ? '✅ تم نسخ الصورة — بمحادثة المشترك بواتساب اضغط مطولاً بخانة الكتابة ← لصق ← إرسال'
-      : '✅ تم نسخ الصورة — اختر جهة الاتصال بواتساب، ثم اضغط مطولاً بخانة الكتابة ← لصق ← إرسال',
-    4500
-  );
-  return true;
 }
-
+function downloadBlob(blob, fileName){
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
 async function shareReceiptImage(sub){
   const btn = document.getElementById('btnShare');
   const originalLabel = btn.textContent;
@@ -1236,19 +1231,8 @@ async function shareReceiptImage(sub){
         title:'وصل اشتراك انترنت',
         text:`وصل اشتراك ${sub.name||''} — مكتبة العقيلة / قاسم الاسدي للانترنت`
       });
-    } else if(!(await copyImageAndOpenWhatsapp(sub, blob))){
-      // fallback الأخير: لو الحافظة نفسها غير مدعومة بهذا المتصفح، نزّل الصورة
-      // تلقائياً لجهاز المستخدم، ونفتح نافذة فيها زر يفتح محادثة واتساب لنفس
-      // المشترك مباشرة على رقمه (يبقى الإرفاق يدوي بهذي الحالة فقط).
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = fileName;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-      openImageSendModal(sub, 'وصل اشتراك', canvas.toDataURL('image/png', 1), fileName);
+    } else {
+      openShareImageModal(sub, 'وصل اشتراك', blob, fileName);
     }
   } catch(err){
     if(err && err.name === 'AbortError'){
@@ -1326,18 +1310,8 @@ async function shareCardImage(sub, btn, kind){
     if(navigator.canShare && navigator.canShare({ files:[file] })){
       await navigator.share({ files:[file], title:`${what} اشتراك`, text:`${what} اشتراك ${sub.name||''}` });
       sent = true;
-    } else if(await copyImageAndOpenWhatsapp(sub, blob)){
-      sent = true;
     } else {
-      // fallback الأخير: لو الحافظة نفسها غير مدعومة بهذا المتصفح، احفظ الصورة
-      // تلقائياً بجهاز المستخدم فوراً، وافتح نافذة فيها زر يفتح محادثة واتساب
-      // لنفس المشترك مباشرة على رقمه (يبقى الإرفاق يدوي بهذي الحالة فقط).
-      const dlUrl = URL.createObjectURL(blob);
-      const dl = document.createElement('a');
-      dl.href = dlUrl; dl.download = fileName;
-      document.body.appendChild(dl); dl.click(); dl.remove();
-      URL.revokeObjectURL(dlUrl);
-      openImageSendModal(sub, what, canvas.toDataURL('image/png', 1), fileName);
+      openShareImageModal(sub, what, blob, fileName);
       sent = true;
     }
   } catch(err){
@@ -1363,42 +1337,43 @@ async function shareCardImage(sub, btn, kind){
   }
 }
 // نافذة موحّدة تظهر بعد تجهيز أي صورة (وصل، تذكير، أو تجديد) لمّا المتصفح/التطبيق
-// ما يدعم المشاركة المباشرة للملفات: الصورة تُحفظ تلقائياً بجهاز المستخدم، وفيها زر
-// يفتح محادثة واتساب مباشرة — إما على رقم المشترك المسجل، أو برقم تكتبه يدوياً
-// إذا ما كان عنده رقم محفوظ. يبقى بس إرفاق الصورة داخل واتساب يدوياً، لأنه ما فيه
-// طريقة برمجية تربط ملف بمحادثة واتساب مباشرة بدون دعم مشاركة الملفات من التطبيق.
-function openImageSendModal(sub, title, dataUrl, fileName){
+// ما يدعم المشاركة المباشرة للملفات: فيها زرّين جنب بعض — "تنزيل الصورة" يحفظها
+// بجهاز المستخدم مباشرة (بالهاتف تنزل بمجلد التنزيلات)، و"إرسال واتساب" ينسخ
+// الصورة تلقائياً للحافظة ويفتح واتساب — إما على محادثة رقم المشترك المسجل، وإلا
+// على قائمة اختيار جهة اتصال بواتساب نفسه. يبقى بس لصق الصورة داخل واتساب (اضغط
+// مطوّلاً بخانة الكتابة ← لصق) وإرسالها.
+function openShareImageModal(sub, title, blob, fileName){
   const host = document.getElementById('modalHost');
-  const savedNumber = sub.phone ? toWhatsAppNumber(sub.phone) : '';
-  const waLinkFor = (num) => `https://wa.me/${num}`;
+  const previewUrl = URL.createObjectURL(blob);
+  const num = sub.phone ? toWhatsAppNumber(sub.phone) : '';
   host.innerHTML = `
     <div class="overlay" id="csOv">
       <div class="modal" style="width:340px;">
         <h3>🖼 ${escapeHtml(title)} — ${escapeHtml(sub.name)}</h3>
-        <div class="hint" style="font-weight:bold; color:var(--teal-dark);">1️⃣ اضغط مطوّلاً على الصورة تحت ← اختر "تنزيل الصورة" أو "حفظ الصورة" لحفظها بجهازك (التنزيل التلقائي لا يعمل على هذا التطبيق، هذي الطريقة الوحيدة المضمونة).</div>
-        <img src="${dataUrl}" alt="${escapeHtml(title)}" style="max-width:100%; max-height:230px; width:auto; margin:0 auto 10px; border-radius:10px; border:1px solid var(--line); display:block; object-fit:contain;">
-        ${!savedNumber ? `
-        <div class="hint" style="color:#b3413e;">⚠️ هذا المشترك ما عنده رقم هاتف محفوظ. اكتب رقم واتساب حتى تفتح له المحادثة مباشرة (بدون ما يتسجل ببطاقته):</div>
-        <input type="tel" id="cs_manual_phone" placeholder="مثال: 07701234567" style="width:100%; padding:8px; border-radius:8px; border:1px solid var(--line); box-sizing:border-box; margin-bottom:8px;" dir="ltr">
-        ` : ''}
-        <div class="hint" style="font-weight:bold; color:var(--teal-dark); margin-bottom:0;">2️⃣ بعدها اضغط الزر تحت، وداخل واتساب اضغط 📎 وأرفق نفس الصورة اللي حفظتها.</div>
+        <img src="${previewUrl}" alt="${escapeHtml(title)}" style="max-width:100%; max-height:230px; width:auto; margin:0 auto 10px; border-radius:10px; border:1px solid var(--line); display:block; object-fit:contain;">
+        <div class="hint">📥 "تنزيل الصورة" يحفظها بهاتفك، أو 💬 "إرسال واتساب" ينسخ الصورة تلقائياً ويفتح لك واتساب${num ? ' على محادثة المشترك' : ''} — يبقى بس تلصقها (اضغط مطوّلاً بخانة الكتابة ← لصق) وترسلها.</div>
         <div class="modal-actions">
-          ${savedNumber
-            ? `<a class="tbtn primary" id="cs_whatsapp" href="${waLinkFor(savedNumber)}" target="_blank" rel="noopener" style="text-align:center; text-decoration:none;">💬 إرسال واتساب</a>`
-            : `<button class="tbtn primary" id="cs_whatsapp_manual">💬 إرسال واتساب</button>`}
-          <button class="tbtn" id="cs_close">إغلاق</button>
+          <button class="tbtn" id="csi_download">📥 تنزيل الصورة</button>
+          <button class="tbtn primary" id="csi_whatsapp">💬 إرسال واتساب</button>
+        </div>
+        <div class="modal-actions" style="margin-top:6px;">
+          <button class="tbtn" id="csi_close" style="width:100%;">إغلاق</button>
         </div>
       </div>
     </div>`;
-  document.getElementById('cs_close').onclick = ()=> host.innerHTML='';
-  if(!savedNumber){
-    document.getElementById('cs_whatsapp_manual').onclick = ()=>{
-      const raw = document.getElementById('cs_manual_phone').value.trim();
-      if(!raw){ alert('اكتب رقم الهاتف أولاً.'); return; }
-      const num = toWhatsAppNumber(raw);
-      window.open(waLinkFor(num), '_blank', 'noopener');
-    };
-  }
+  document.getElementById('csi_close').onclick = ()=>{ host.innerHTML=''; URL.revokeObjectURL(previewUrl); };
+  document.getElementById('csi_download').onclick = ()=> downloadBlob(blob, fileName);
+  document.getElementById('csi_whatsapp').onclick = async ()=>{
+    const copied = await copyImageToClipboard(blob);
+    const waLink = num ? `https://wa.me/${num}` : 'https://api.whatsapp.com/send';
+    window.open(waLink, '_blank', 'noopener');
+    showSavedToast(
+      copied
+        ? (num ? '✅ تم نسخ الصورة — بمحادثة المشترك اضغط مطوّلاً بخانة الكتابة ← لصق ← إرسال' : '✅ تم نسخ الصورة — اختر جهة الاتصال، اضغط مطوّلاً بخانة الكتابة ← لصق ← إرسال')
+        : '⚠️ تعذّر نسخ الصورة تلقائياً — نزّل الصورة أولاً بالزر الثاني وأرفقها يدوياً بواتساب',
+      4500
+    );
+  };
 }
 
 function receiptTemplate(sub){
