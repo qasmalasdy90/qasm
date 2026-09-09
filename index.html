@@ -24,6 +24,7 @@
     --muted:#7a7267;
   }
   *{box-sizing:border-box;}
+  button{touch-action:manipulation;}
   html,body{margin:0;padding:0;}
   body{
     background:
@@ -197,9 +198,30 @@
 
   .toolbar{
     display:flex;
-    gap:10px;
+    gap:14px;
     margin-bottom:18px;
+    align-items:flex-start;
+    flex-wrap:nowrap;
+  }
+  .toolbar-main{
+    display:flex;
+    gap:10px;
     flex-wrap:wrap;
+    flex:1;
+    min-width:0;
+  }
+  .toolbar-side{
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+    width:150px;
+    flex-shrink:0;
+    margin-top:44px;
+  }
+  .toolbar-side .tbtn{ width:100%; }
+  @media (max-width: 640px){
+    .toolbar-side{width:120px;}
+    .toolbar-side .tbtn{padding:9px 8px; font-size:12px;}
   }
   .tbtn{
     border:1px solid var(--line);
@@ -263,6 +285,7 @@
 
   /* ===== Receipt view panel — colored backdrop behind the whole receipt screen ===== */
   .view-panel{
+    position:relative;
     background:
       radial-gradient(circle at 4% 0%, rgba(13,110,127,0.22), transparent 55%),
       radial-gradient(circle at 100% 10%, rgba(200,146,43,0.26), transparent 55%),
@@ -279,6 +302,7 @@
 
   /* ===== Receipt ===== */
   .receipt-wrap{
+    position:relative;
     display:flex;
     justify-content:center;
     background:
@@ -507,9 +531,14 @@
   .modal{
     background:#fff; border-radius:14px; padding:22px; width:340px;
     max-width:90vw; max-height:88vh; overflow-y:auto;
+    -webkit-overflow-scrolling:touch;
   }
   .modal h3{margin:0 0 14px; font-family:'Cairo',sans-serif; color:var(--teal-dark);}
-  .modal-actions{display:flex; gap:10px; margin-top:16px;}
+  .modal-actions{
+    display:flex; gap:10px; margin-top:16px;
+    position:sticky; bottom:-22px; z-index:2;
+    background:#fff; padding:12px 0 22px; margin-bottom:-22px;
+  }
   .modal-actions button{flex:1;}
 
   .hint{font-size:11.5px; color:var(--muted); margin-top:-6px; margin-bottom:10px;}
@@ -581,7 +610,6 @@
       <button class="add-btn" id="btnImport" style="flex:1; background:var(--teal-dark); font-size:12.5px; padding:9px 6px;">⬆️ استيراد نسخة</button>
       <input type="file" id="importFile" accept="application/json,.json" style="display:none;">
     </div>
-    <button class="add-btn" id="btnConnectBackup" style="display:none; background:var(--gold); font-size:12.5px; padding:9px 6px;">🔗 ربط ملف نسخة احتياطية (تحديث تلقائي بدون تكرار)</button>
     <button class="add-btn" id="btnDeleteOld" style="background:#b3413e; font-size:12.5px; padding:9px 6px;">🗑️ حذف المشتركين القدامى (منتهي أكثر من شهر)</button>
     <button class="add-btn" id="btnProfits" style="background:#1e8a5f; font-size:13px; padding:10px 6px;">💰 الأرباح والديون</button>
     <div style="display:flex; gap:6px;">
@@ -823,31 +851,56 @@ function isExpiringSoon(sub){
 function remainingDebtOf(sub){
   return Math.max(0,(Number(sub.price)||0) - (Number(sub.paid)||0)) + extractDebtFromNotes(sub.notes);
 }
+// تسديد سريع من قائمة "تذكيرات الدين": يجعل المبلغ الواصل = سعر الاشتراك،
+// ويشيل أي مبلغ دين مكتوب نصياً بالملاحظات (مثلاً "دين 20")، فيصفر الدين
+// المتبقي فوراً ويتحول المشترك من "مديون" إلى "غير مديون" بضغطة واحدة، بدون
+// فتح نموذج التعديل.
+function markDebtPaid(subId){
+  const sub = state.subscribers.find(s=>s.id===subId);
+  if(!sub) return;
+  sub.paid = Number(sub.price)||0;
+  if(sub.notes) sub.notes = sub.notes.replace(/دين\D{0,10}?[\d,\.]+/g, '').trim();
+  saveState();
+  render();
+  showSavedToast(`✅ تم تسديد دين ${sub.name}`);
+}
+// تذكير الدين منفصل تماماً عن تذكير الانتهاء: كل واحد له شريط زر مستقل بأعلى
+// القائمة الجانبية، ونافذته الخاصة — حتى لو اشترك واحد عليه الاثنين معاً
+// (قارب على الانتهاء وعليه دين)، يظهر باثنين القوائم كل وحدة لحالها.
 function renderReminders(){
   const banner = document.getElementById('remindersBanner');
   if(!banner) return;
   const soon = state.subscribers.filter(isExpiringSoon);
   const debtors = state.subscribers.filter(s=> remainingDebtOf(s) > 0);
-  if(!soon.length && !debtors.length){ banner.innerHTML = ''; return; }
-  const parts = [];
-  if(soon.length) parts.push(`${soon.length} مشترك قارب اشتراكه على الانتهاء`);
-  if(debtors.length) parts.push(`${debtors.length} عليهم دين لم يسدد`);
-  banner.innerHTML = `
-    <button type="button" id="btnReminders" style="width:100%; text-align:right; background:#fbf0dd; border:1px solid var(--warn); color:var(--warn); border-radius:9px; padding:9px 12px; font-family:'Tajawal',sans-serif; font-weight:700; font-size:12.5px; cursor:pointer;">
-      🔔 ${parts.join(' و')} — إرسال تذكير
+  let html = '';
+  if(soon.length){
+    html += `
+    <button type="button" id="btnReminders" style="width:100%; text-align:right; background:#fbf0dd; border:1px solid var(--warn); color:var(--warn); border-radius:9px; padding:9px 12px; font-family:'Tajawal',sans-serif; font-weight:700; font-size:12.5px; cursor:pointer; margin-bottom:6px;">
+      🔔 ${soon.length} مشترك قارب اشتراكه على الانتهاء — إرسال تذكير
     </button>`;
-  document.getElementById('btnReminders').onclick = openRemindersModal;
+  }
+  if(debtors.length){
+    html += `
+    <button type="button" id="btnDebtReminders" style="width:100%; text-align:right; background:#fdecea; border:1px solid var(--bad); color:var(--bad); border-radius:9px; padding:9px 12px; font-family:'Tajawal',sans-serif; font-weight:700; font-size:12.5px; cursor:pointer;">
+      🔴 ${debtors.length} عليهم دين لم يسدد — إرسال تذكير دين
+    </button>`;
+  }
+  banner.innerHTML = html;
+  if(soon.length) document.getElementById('btnReminders').onclick = openExpiryRemindersModal;
+  if(debtors.length) document.getElementById('btnDebtReminders').onclick = openDebtRemindersModal;
 }
-function openRemindersModal(){
+function openExpiryRemindersModal(){
   const host = document.getElementById('modalHost');
   const soon = state.subscribers.filter(isExpiringSoon).sort((a,b)=> hoursLeft(a)-hoursLeft(b));
-  const debtors = state.subscribers.filter(s=> remainingDebtOf(s) > 0).sort((a,b)=> remainingDebtOf(b)-remainingDebtOf(a));
   host.innerHTML = `
     <div class="overlay" id="ov">
       <div class="modal">
-        <h3>🔔 تذكيرات انتهاء الاشتراك</h3>
+        <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:10px;">
+          <h3 style="margin:0 0 14px;">🔔 تذكيرات انتهاء الاشتراك</h3>
+          <button type="button" id="rem_close" title="إغلاق" style="flex-shrink:0; width:54px; height:44px; padding:0; border:none; border-radius:8px; background:var(--bad); color:#fff; font-family:'Tajawal',sans-serif; font-weight:800; font-size:12px; cursor:pointer;">إغلاق</button>
+        </div>
         <div class="hint">اضغط "إرسال كصورة" بجنب أي مشترك — تُجهَّز صورة تذكير باسمه وتُفتح قائمة المشاركة، اختر واتساب واختر الشخص، والصورة توصل جاهزة للإرسال. المشترك الذي لا يوجد له رقم هاتف مسجَّل يظهر بالقائمة لكن لا يمكن إرسال تذكير له حتى تُضاف رقمه. والمشترك الذي أُرسل له تذكير عن اشتراكه الحالي يختفي زر الإرسال له حتى يُجدَّد الاشتراك، وعندها يظهر من جديد عند اقتراب انتهاء الاشتراك الجديد.</div>
-        <div id="rem_list" style="max-height:50vh; overflow-y:auto; display:flex; flex-direction:column; gap:8px; margin-top:10px;">
+        <div id="rem_list" style="display:flex; flex-direction:column; gap:8px; margin-top:10px;">
           ${soon.length ? soon.map(s=>{
             const alreadySentForThisExpiry = s.reminderSentForExpiry === s.expiryDate;
             let btnHtml;
@@ -870,29 +923,6 @@ function openRemindersModal(){
             </div>
           `;}).join('') : `<div class="hint">لا يوجد مشتركين قريبين من الانتهاء حالياً.</div>`}
         </div>
-        ${debtors.length ? `
-        <h3 style="margin-top:20px;">🔴 مشتركين عليهم دين لم يسدد</h3>
-        <div class="hint">اضغط "إرسال تذكير دين" بجنب أي مشترك — تُجهَّز صورة تذكير باسمه وبمبلغ الدين المتبقي، وتُفتح قائمة المشاركة على واتساب مثل تذكير الانتهاء.</div>
-        <div id="debt_list" style="max-height:50vh; overflow-y:auto; display:flex; flex-direction:column; gap:8px; margin-top:10px;">
-          ${debtors.map(s=>{
-            const remaining = remainingDebtOf(s);
-            const btnHtml = !s.phone
-              ? `<button type="button" class="tbtn" disabled style="white-space:nowrap; opacity:.5; cursor:not-allowed;">🔴 إرسال تذكير دين</button>`
-              : `<button type="button" class="tbtn danger debt-send" data-id="${s.id}" style="white-space:nowrap;">🔴 إرسال تذكير دين</button>`;
-            return `
-            <div style="border:1px solid var(--line); border-radius:9px; padding:10px; display:flex; justify-content:space-between; align-items:center; gap:8px;">
-              <div>
-                <div style="font-weight:700;">${escapeHtml(s.name)}</div>
-                <div class="hint" style="margin:2px 0 0; color:var(--bad);">الدين المتبقي: ${fmtMoney(remaining)} د.ع</div>
-                ${!s.phone ? `<div class="hint" style="margin:2px 0 0; color:var(--bad);">⚠️ لا يوجد رقم هاتف</div>` : ''}
-              </div>
-              ${btnHtml}
-            </div>
-          `;}).join('')}
-        </div>` : ''}
-        <div class="modal-actions">
-          <button class="tbtn" id="rem_close">إغلاق</button>
-        </div>
       </div>
     </div>
   `;
@@ -904,12 +934,63 @@ function openRemindersModal(){
     const sub = state.subscribers.find(s=>s.id===btn.dataset.id);
     if(sub) shareCardImage(sub, btn, 'reminder');
   });
+}
+// نافذة الديون مستقلة تماماً عن نافذة تذكير الانتهاء. بجنب كل مشترك زرّين:
+// "🔴 إرسال تذكير دين" (يفتح واتساب بصورة تذكير)، و"✅ تسديد" الصغير — بضغطة
+// واحدة عليه يتحول المشترك فوراً من مديون إلى غير مديون ويختفي من القائمة.
+function openDebtRemindersModal(){
+  const host = document.getElementById('modalHost');
+  const debtors = state.subscribers.filter(s=> remainingDebtOf(s) > 0).sort((a,b)=> remainingDebtOf(b)-remainingDebtOf(a));
+  host.innerHTML = `
+    <div class="overlay" id="ov">
+      <div class="modal">
+        <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:10px;">
+          <h3 style="margin:0 0 14px;">🔴 مشتركين عليهم دين لم يسدد</h3>
+          <button type="button" id="debt_close" title="إغلاق" style="flex-shrink:0; width:54px; height:44px; padding:0; border:none; border-radius:8px; background:var(--bad); color:#fff; font-family:'Tajawal',sans-serif; font-weight:800; font-size:12px; cursor:pointer;">إغلاق</button>
+        </div>
+        <div class="hint">اضغط "إرسال تذكير دين" بجنب أي مشترك — تُجهَّز صورة تذكير باسمه وبمبلغ الدين المتبقي، وتُفتح قائمة المشاركة على واتساب. أو اضغط الزر الصغير "✅ تسديد" لتأكيد استلام الدين مباشرة — يتحول المشترك فوراً إلى غير مديون ويختفي من هذي القائمة.</div>
+        <div id="debt_list" style="display:flex; flex-direction:column; gap:8px; margin-top:10px;">
+          ${debtors.length ? debtors.map(s=>{
+            const remaining = remainingDebtOf(s);
+            const sendBtnHtml = !s.phone
+              ? `<button type="button" class="tbtn" disabled style="white-space:nowrap; opacity:.5; cursor:not-allowed;">🔴 إرسال تذكير دين</button>`
+              : `<button type="button" class="tbtn danger debt-send" data-id="${s.id}" style="white-space:nowrap;">🔴 إرسال تذكير دين</button>`;
+            return `
+            <div style="border:1px solid var(--line); border-radius:9px; padding:10px; display:flex; justify-content:space-between; align-items:center; gap:8px;">
+              <div>
+                <div style="font-weight:700;">${escapeHtml(s.name)}</div>
+                <div class="hint" style="margin:2px 0 0; color:var(--bad);">الدين المتبقي: ${fmtMoney(remaining)} د.ع</div>
+                ${!s.phone ? `<div class="hint" style="margin:2px 0 0; color:var(--bad);">⚠️ لا يوجد رقم هاتف</div>` : ''}
+              </div>
+              <div style="display:flex; flex-direction:column; gap:6px; align-items:flex-end;">
+                ${sendBtnHtml}
+                <button type="button" class="tbtn debt-paid" data-id="${s.id}" title="تحويل المشترك إلى غير مديون" style="white-space:nowrap; padding:5px 10px; font-size:12px; background:var(--ok); color:#fff; border-color:var(--ok);">✅ تسديد</button>
+              </div>
+            </div>
+          `;}).join('') : `<div class="hint">لا يوجد مشتركين عليهم دين حالياً.</div>`}
+        </div>
+      </div>
+    </div>
+  `;
+  document.getElementById('debt_close').onclick = ()=> host.innerHTML='';
   const debtList = document.getElementById('debt_list');
   if(debtList) debtList.addEventListener('click', (e)=>{
-    const btn = e.target.closest('.debt-send');
-    if(!btn) return;
-    const sub = state.subscribers.find(s=>s.id===btn.dataset.id);
-    if(sub) shareCardImage(sub, btn, 'debt');
+    const sendBtn = e.target.closest('.debt-send');
+    if(sendBtn){
+      const sub = state.subscribers.find(s=>s.id===sendBtn.dataset.id);
+      if(sub) shareCardImage(sub, sendBtn, 'debt');
+      return;
+    }
+    const paidBtn = e.target.closest('.debt-paid');
+    if(paidBtn){
+      // نحفظ موضع التمرير الحالي قبل التحديث حتى ما تنط القائمة لأعلى بعد
+      // كل تسديد — المستخدم يبقى بنفس مكانه ويقدر يكمل التسديد براحته.
+      const scrollTop = debtList.scrollTop;
+      markDebtPaid(paidBtn.dataset.id);
+      openDebtRemindersModal(); // نحدّث القائمة بمكانها — المشترك اللي انسدد يختفي فوراً
+      const newList = document.getElementById('debt_list');
+      if(newList) newList.scrollTop = scrollTop;
+    }
   });
 }
 
@@ -1217,20 +1298,29 @@ function renderMain(){
   const st = statusOf(sub);
   main.innerHTML = `
     <div class="view-panel">
+    <button type="button" id="btnCloseView" title="إغلاق" style="position:absolute; top:14px; left:14px; z-index:5; width:34px; height:34px; padding:0; border-radius:50%; border:1px solid var(--line); background:#fff; color:var(--bad); font-weight:800; font-size:15px; cursor:pointer;">✕</button>
     <div class="toolbar">
-      <button class="tbtn primary" id="btnRenew">↻ تجديد الاشتراك</button>
-      <button class="tbtn" id="btnPhoto">📷 التقاط صورة الاشتراك</button>
-      <button class="tbtn" id="btnEdit">تعديل بيانات المشترك</button>
-      <button class="tbtn gold" id="btnPrint">🖨 طباعة الوصل</button>
-      <button class="tbtn" id="btnShare">📤 مشاركة كصورة (واتساب)</button>
-      <button class="tbtn" id="btnDebtReminder">🔴 دين لم يسدد</button>
-      <button class="tbtn" id="btnWhatsappReminder">⏰ تذكير انتهاء كصورة (واتساب)</button>
-      <button class="tbtn" id="btnWhatsappRenewed">✅ تأكيد التجديد كصورة (واتساب)</button>
-      <button class="tbtn danger" id="btnDelete">حذف المشترك</button>
+      <div class="toolbar-main">
+        <button class="tbtn primary" id="btnRenew">↻ تجديد الاشتراك</button>
+        <button class="tbtn" id="btnPhoto">📷 التقاط صورة الاشتراك</button>
+        <button class="tbtn" id="btnEdit">تعديل بيانات المشترك</button>
+        <button class="tbtn" id="btnShare">📤 مشاركة كصورة (واتساب)</button>
+        <button class="tbtn" id="btnWhatsappReminder">⏰ تذكير انتهاء كصورة (واتساب)</button>
+        <button class="tbtn" id="btnWhatsappRenewed">✅ تأكيد التجديد كصورة (واتساب)</button>
+      </div>
+      <div class="toolbar-side">
+        <button class="tbtn gold" id="btnPrint">🖨 طباعة الوصل</button>
+        <button class="tbtn" id="btnDebtReminder">🔴 دين لم يسدد</button>
+        <button class="tbtn danger" id="btnDelete">حذف المشترك</button>
+      </div>
     </div>
     <div class="grid2">
-      <div class="receipt-wrap" id="printArea">
-        ${receiptTemplate(sub)}
+      <div>
+        <button type="button" id="btnReopenReceipt" style="display:none; width:100%; text-align:center; background:var(--panel); border:1px dashed var(--line); border-radius:12px; padding:12px; margin-bottom:10px; color:var(--teal-dark); font-family:'Tajawal',sans-serif; font-weight:700; font-size:13px; cursor:pointer;">🧾 إظهار الوصل من جديد</button>
+        <div class="receipt-wrap" id="receiptWrap">
+          <button type="button" id="btnCloseReceipt" title="إغلاق الوصل" style="position:absolute; top:8px; left:8px; z-index:5; width:30px; height:30px; border-radius:50%; border:1px solid var(--line); background:#fff; color:var(--bad); font-weight:800; font-size:15px; cursor:pointer; box-shadow:0 2px 6px rgba(0,0,0,.15);">✕</button>
+          <div id="printArea">${receiptTemplate(sub)}</div>
+        </div>
       </div>
       <div>
         <div class="card photo-card" style="margin-bottom:16px;">
@@ -1256,7 +1346,16 @@ function renderMain(){
     </div>
     </div>
   `;
+  document.getElementById('btnCloseReceipt').onclick = ()=>{
+    document.getElementById('receiptWrap').style.display = 'none';
+    document.getElementById('btnReopenReceipt').style.display = 'block';
+  };
+  document.getElementById('btnReopenReceipt').onclick = ()=>{
+    document.getElementById('receiptWrap').style.display = 'flex';
+    document.getElementById('btnReopenReceipt').style.display = 'none';
+  };
   document.getElementById('btnRenew').onclick = ()=> openRenewModal(sub);
+  document.getElementById('btnCloseView').onclick = ()=>{ activeId = null; mode = 'view'; render(); };
   document.getElementById('btnPhoto').onclick = ()=> openPhotoModal(sub);
   document.getElementById('btnEdit').onclick = ()=>{ mode='edit'; render(); };
   document.getElementById('btnPrint').onclick = ()=> window.print();
@@ -1390,7 +1489,8 @@ function cardTemplate(sub, kind){
         <div class="rc-icon">🔴</div>
         <div class="rc-greeting">عزيزي المشترك ${escapeHtml(sub.name)}</div>
         <div class="rc-body">
-          تاريخ الاشتراك: <b>${fmtDate(sub.subscriptionDate)}</b><br>
+          تاريخ الاشتراك: <b>${fmtDateTime(sub.subscriptionDate, sub.subscriptionTime)}</b><br>
+          تاريخ انتهاء الاشتراك: <b>${fmtDateTime(sub.expiryDate, sub.expiryTime)}</b><br>
           يوجد بذمتكم دين لم يسدد بمبلغ: <b>${fmtMoney(remaining)} د.ع</b>
         </div>
         <div class="rc-note">يرجى التكرم بتسديد الدين في أقرب وقت ممكن. مع الشكر لتعاونكم.</div>
@@ -1484,7 +1584,7 @@ async function shareCardImage(sub, btn, kind){
     sub.reminderSentForExpiry = sub.expiryDate;
     await saveState();
     render();
-    if(document.getElementById('rem_list')) openRemindersModal();
+    if(document.getElementById('rem_list')) openExpiryRemindersModal();
   }
 }
 // نافذة موحّدة تظهر بعد تجهيز أي صورة (وصل، تذكير، أو تجديد) لمّا المتصفح/التطبيق
@@ -1555,6 +1655,7 @@ function receiptTemplate(sub){
       ${sub.notes ? `<div class="r-row r-notes-row"><span class="k">📝 ملاحظات</span><span class="v">${escapeHtml(sub.notes)}</span></div>` : ''}
       ${remaining > 0 ? `<div class="r-row"><span class="k">الباقي</span><span class="v">${remaining} د.ع</span></div>` : ''}
       <div class="status-line ${st.cls}">${st.text}</div>
+      ${remainingDebtOf(sub) > 0 ? `<div class="status-line bad" style="margin-top:6px;">🔴 دين لم يسدد: ${fmtMoney(remainingDebtOf(sub))} د.ع</div>` : ''}
       <div class="r-notes">
         تنويه للمشتركين:<br>
         ١. الصيانة مجانية للمشترك الجديد من تنصيب وبرمجة<br>
@@ -1885,7 +1986,6 @@ function openRenewModal(sub){
     sub.expiryTime = chosenTime;
     sub.price = price;
     sub.paid = paid;
-    sub.receiptNo = state.nextReceiptNo++;
     delete sub.reminderSentForExpiry; // renewed → this is a fresh expiry cycle, reminder eligibility resets
     await saveState();
     host.innerHTML = '';
@@ -2501,15 +2601,6 @@ document.getElementById('btnExport').addEventListener('click', ()=>{
   downloadBackupFile(`نسخة-المشتركين-${todayISO()}.json`);
   showSavedToast(`⬇️ صُدِّرت نسخة تحتوي ${state.subscribers.length} مشترك — أرسلها مع الملف للجهاز الثاني`);
 });
-
-// Only shown when the browser supports writing directly into one chosen file
-// (mainly desktop Chrome/Edge) — lets every future save overwrite that same
-// file instead of creating a new download each time.
-if(supportsLiveBackup){
-  const btnConnect = document.getElementById('btnConnectBackup');
-  btnConnect.style.display = 'block';
-  btnConnect.addEventListener('click', connectBackupFile);
-}
 
 document.getElementById('btnImport').addEventListener('click', ()=>{
   document.getElementById('importFile').click();
