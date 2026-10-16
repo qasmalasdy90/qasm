@@ -3185,68 +3185,6 @@
       "photoDate": null
     },
     {
-      "id": "S1a0646aefbcazae",
-      "receiptNo": 90,
-      "history": [
-        {
-          "label": "مستورد من لوحة EarthLink",
-          "date": "2026-09-10",
-          "fromExpiry": "",
-          "fromTime": "",
-          "toExpiry": "2026-09-10",
-          "toTime": "02:07"
-        },
-        {
-          "label": "تحديث من الملف المرفوع",
-          "date": "2026-09-07",
-          "fromExpiry": "2026-09-10",
-          "fromTime": "02:07",
-          "toExpiry": "2026-09-10",
-          "toTime": "02:07"
-        },
-        {
-          "label": "مستورد من لوحة EarthLink",
-          "date": "2026-09-10",
-          "fromExpiry": "2026-09-10",
-          "fromTime": "02:07",
-          "toExpiry": "2026-10-10",
-          "toTime": "14:38"
-        },
-        {
-          "label": "تحديث من الملف المرفوع",
-          "date": "2026-09-10",
-          "fromExpiry": "2026-10-10",
-          "fromTime": "14:38",
-          "toExpiry": "2026-09-10",
-          "toTime": "02:07"
-        },
-        {
-          "label": "مستورد من لوحة EarthLink",
-          "date": "2026-09-17",
-          "fromExpiry": "2026-09-10",
-          "fromTime": "02:07",
-          "toExpiry": "2026-10-10",
-          "toTime": "14:38"
-        }
-      ],
-      "name": "كاظم سالم يم مقتدى",
-      "nameEn": "k80@vzgg3",
-      "phone": "07709530408",
-      "lineType": "EarthLink مباشر",
-      "subType": "Plus",
-      "routerCode": "",
-      "subscriptionDate": "2026-08-11",
-      "subscriptionTime": "02:07",
-      "expiryDate": "2026-10-10",
-      "expiryTime": "14:38",
-      "price": 40,
-      "paid": 40,
-      "notes": "",
-      "photos": [],
-      "photo": null,
-      "photoDate": null
-    },
-    {
       "id": "S1a0646aefbdgngw",
       "receiptNo": 91,
       "history": [
@@ -6114,60 +6052,6 @@
       "expiryTime": "20:54",
       "price": 40,
       "paid": 40,
-      "notes": "",
-      "photos": [],
-      "photo": null,
-      "photoDate": null
-    },
-    {
-      "id": "S1a0646aeff3pvip",
-      "receiptNo": 140,
-      "history": [
-        {
-          "label": "مستورد من لوحة EarthLink",
-          "date": "2026-09-20",
-          "fromExpiry": "",
-          "fromTime": "",
-          "toExpiry": "2026-09-20",
-          "toTime": "19:56"
-        },
-        {
-          "label": "مستورد من لوحة EarthLink",
-          "date": "2026-09-07",
-          "fromExpiry": "2026-09-20",
-          "fromTime": "19:56",
-          "toExpiry": "2026-10-03",
-          "toTime": "18:02"
-        },
-        {
-          "label": "مستورد من لوحة EarthLink",
-          "date": "2026-09-07",
-          "fromExpiry": "2026-10-03",
-          "fromTime": "18:02",
-          "toExpiry": "2026-09-20",
-          "toTime": "19:56"
-        },
-        {
-          "label": "تحديث من الملف المرفوع",
-          "date": "2026-09-07",
-          "fromExpiry": "2026-09-20",
-          "fromTime": "19:56",
-          "toExpiry": "2026-09-20",
-          "toTime": "19:56"
-        }
-      ],
-      "name": "علي عزيز جاري",
-      "nameEn": "ali6@vzggx2",
-      "phone": "07827115384",
-      "lineType": "EarthLink مباشر",
-      "subType": "Economy",
-      "routerCode": "",
-      "subscriptionDate": "2026-08-21",
-      "subscriptionTime": "19:56",
-      "expiryDate": "2026-09-20",
-      "expiryTime": "19:56",
-      "price": 35,
-      "paid": 35,
       "notes": "",
       "photos": [],
       "photo": null,
@@ -10146,7 +10030,9 @@
     "ali106@vzggx2",
     "hsn48@vzgg3",
     "s50@vzggx2",
-    "s2@vzggx2"
+    "s2@vzggx2",
+    "k80@vzgg3",
+    "ali6@vzggx2"
   ],
   "seedApplied": true
 }
