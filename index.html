@@ -1006,6 +1006,8 @@ function isExpiringSoon(sub){
 // تُستخدم بزر "دين لم يسدد" وبقائمة التذكيرات وبتقرير الأرباح والديون، حتى
 // يكون الرقم نفسه بكل مكان.
 function remainingDebtOf(sub){
+  // المشترك اللي اندمج من لوحة EarthLink: الدين حسب اللوحة بس
+  if(sub.elSynced) return earthlinkDebtOf(sub);
   const own = Math.max(0,(Number(sub.price)||0) - (Number(sub.paid)||0)) + extractDebtFromNotes(sub.notes);
   return Math.max(own, earthlinkDebtOf(sub));
 }
@@ -1154,11 +1156,20 @@ function openDebtRemindersModal(){
     if(paidBtn){
       // نحفظ موضع التمرير الحالي قبل التحديث حتى ما تنط القائمة لأعلى بعد
       // كل تسديد — المستخدم يبقى بنفس مكانه ويقدر يكمل التسديد براحته.
-      const scrollTop = debtList.scrollTop;
+      // نبقى بنفس المكان: ما نعيد فتح القائمة، بس نعلّم السطر "تم التسديد"
+      const row = paidBtn.closest('#debt_list > div');
       markDebtPaid(paidBtn.dataset.id);
-      openDebtRemindersModal(); // نحدّث القائمة بمكانها — المشترك اللي انسدد يختفي فوراً
-      const newList = document.getElementById('debt_list');
-      if(newList) newList.scrollTop = scrollTop;
+      if(row){
+        row.style.opacity = '.55';
+        row.style.background = '#eef8f1';
+        row.querySelectorAll('button').forEach(b=> b.remove());
+        const tag = document.createElement('div');
+        tag.textContent = '✅ تم التسديد';
+        tag.style.cssText = 'color:var(--ok); font-weight:800; white-space:nowrap;';
+        row.appendChild(tag);
+        const debtLine = row.querySelector('.hint');
+        if(debtLine){ debtLine.textContent = 'الدين المتبقي: 0 د.ع'; debtLine.style.color = 'var(--ok)'; }
+      }
     }
   });
 }
@@ -3040,10 +3051,11 @@ function mergeEarthlinkRows(rows){
         if(r.unpaid > 0){
           // باللوحة مو مسدد ← هنا هم يصير مو مسدد
           existing.paid = Math.max(0, price - earthlinkDebtOf(existing));
-        } else if(wasUnpaid){
-          // باللوحة تسدد ← هنا هم يتسدد
+        } else {
+          // باللوحة مسدد (All Paid) ← هنا هم مسدد
           existing.paid = price;
         }
+        existing.elSynced = true;
       }
       if(r.displayName && (!existing.name || existing.name === existing.nameEn)) existing.name = r.displayName;
       if(r.accName && subTypes.includes(r.accName)) existing.subType = r.accName;
@@ -3065,7 +3077,7 @@ function mergeEarthlinkRows(rows){
         price: subTypePrices[(r.accName && subTypes.includes(r.accName)) ? r.accName : 'Plus'] || 0,
         paid: r.unpaid ? 0 : (subTypePrices[(r.accName && subTypes.includes(r.accName)) ? r.accName : 'Plus'] || 0),
         notes:'', photos:[], photo:null, photoDate:null,
-        elUnpaid: r.unpaid||0, elNote: r.userNotes||''
+        elUnpaid: r.unpaid||0, elNote: r.userNotes||'', elSynced: true
       });
       added++;
     }
