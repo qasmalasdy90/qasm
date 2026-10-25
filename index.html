@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>قاسم الأسدي للإنترنت | إدارة مشتركي الإنترنت</title>
+<meta http-equiv="Cache-Control" content="no-cache"><title>قاسم الأسدي للإنترنت | إدارة مشتركي الإنترنت</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=Tajawal:wght@400;500;700&display=swap');
 
@@ -583,48 +583,37 @@ let cloudUser = null;
 let _authReadyResolve;
 const authReady = new Promise(r => _authReadyResolve = r);
 (function(){
+  // الدخول: admin / 112233 — يشتغل حتى بدون نت
+  const ADMIN_USER = 'admin';
+  const ADMIN_PASS = '112233';
   const overlay = document.getElementById('loginOverlay');
   const err = document.getElementById('loginError');
-  function enter(user){
-    cloudUser = user || null;
-    try{ localStorage.setItem('qasmCloudLoggedIn','1'); }catch(e){}
+  function enter(){
+    try{ localStorage.setItem('qasmAdminLoggedIn','1'); }catch(e){}
     overlay.style.display = 'none';
+    cloudUser = sb ? { pass: ADMIN_PASS } : null;
     _authReadyResolve(cloudUser);
   }
-  async function tryLogin(){
-    // اسم المستخدم (مثل admin) يتحول لإيميل الحساب بـSupabase: admin@qasm.app
-    let email = document.getElementById('loginUser').value.trim().toLowerCase();
-    if(email && email.indexOf('@') === -1) email = email + '@qasm.app';
-    const password = document.getElementById('loginPass').value;
-    if(!email || !password){ err.textContent = '⚠️ اكتب اسم المستخدم وكلمة السر'; return; }
-    if(!sb){ err.textContent = '⚠️ ماكو انترنت — شغّل النت وأعد فتح الصفحة'; return; }
-    err.style.color = '#555'; err.textContent = '⏳ جاري الدخول...';
-    const { data, error } = await sb.auth.signInWithPassword({ email, password });
-    err.style.color = '#c33f3f';
-    if(error){ err.textContent = '⚠️ اسم المستخدم أو كلمة السر غلط'; return; }
-    err.textContent = '';
-    enter(data.user);
+  function tryLogin(){
+    // يقبل الأرقام العربية (١١٢٢٣٣) والفراغات الزايدة
+    const fix = v => String(v||'').replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d))
+                                   .replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d)).trim();
+    const u = fix(document.getElementById('loginUser').value).toLowerCase();
+    const p = fix(document.getElementById('loginPass').value);
+    if(u === ADMIN_USER && p === ADMIN_PASS) enter();
+    else err.textContent = '⚠️ اسم المستخدم أو كلمة السر غير صحيحة';
   }
   document.getElementById('loginBtn').addEventListener('click', tryLogin);
   document.getElementById('loginPass').addEventListener('keydown', (e)=>{ if(e.key==='Enter') tryLogin(); });
   document.getElementById('loginUser').addEventListener('keydown', (e)=>{ if(e.key==='Enter') tryLogin(); });
-  try{ localStorage.removeItem('qasmAdminLoggedIn'); }catch(e){}
-  if(sb){
-    sb.auth.getSession().then(({ data })=>{
-      if(data && data.session) enter(data.session.user);
-    }).catch(()=>{});
-  } else {
-    // بدون انترنت: إذا هذا الجهاز دخل قبل، يفتح على البيانات المحفوظة بالجهاز بس
-    let was = false; try{ was = localStorage.getItem('qasmCloudLoggedIn') === '1'; }catch(e){}
-    if(was){ enter(null); }
-    else { err.textContent = '⚠️ ماكو انترنت — أول دخول يحتاج نت'; }
-  }
+  let alreadyIn = false;
+  try{ alreadyIn = localStorage.getItem('qasmAdminLoggedIn') === '1'; }catch(e){}
+  if(alreadyIn) enter();
 })();
 async function cloudLogout(){
   if(!confirm('تريد تطلع من الحساب؟')) return;
   try{ await flushCloudSave(); }catch(e){}
-  try{ if(sb) await sb.auth.signOut(); }catch(e){}
-  try{ localStorage.removeItem('qasmCloudLoggedIn'); }catch(e){}
+  try{ localStorage.removeItem('qasmAdminLoggedIn'); }catch(e){}
   location.reload();
 }
 </script>
@@ -750,21 +739,20 @@ async function cloudSave(){
   if(cloudSaving){ cloudPending = true; return; }
   cloudSaving = true;
   try{
-    const owner = cloudUser.id, now = new Date().toISOString();
     const parts = splitForCloud(state);
-    const rows = [{ owner, key:'main', data: parts.main, updated_at: now }];
+    const rows = [{ key:'main', data: parts.main }];
     const newCache = {};
     for(const id in parts.photos){
       const str = JSON.stringify(parts.photos[id]);
       newCache[id] = str;
-      if(cloudPhotoCache[id] !== str) rows.push({ owner, key:'photos:'+id, data:{ photos: parts.photos[id] }, updated_at: now });
+      if(cloudPhotoCache[id] !== str) rows.push({ key:'photos:'+id, data:{ photos: parts.photos[id] } });
     }
     setCloudStatus('☁️ جاري الحفظ...');
-    const { error } = await sb.from('app_state').upsert(rows, { onConflict:'owner,key' });
+    const { error } = await sb.rpc('qasm_save', { p_pass: cloudUser.pass, p_rows: rows });
     if(error) throw error;
     const gone = Object.keys(cloudPhotoCache).filter(id => !(id in newCache));
     if(gone.length){
-      await sb.from('app_state').delete().eq('owner', owner).in('key', gone.map(id => 'photos:'+id));
+      await sb.rpc('qasm_delete', { p_pass: cloudUser.pass, p_keys: gone.map(id => 'photos:'+id) });
     }
     cloudPhotoCache = newCache;
     setCloudStatus('☁️ محفوظ بالسحابة ✓', '#1e8a5f');
@@ -790,9 +778,9 @@ document.addEventListener('visibilitychange', function(){
 });
 async function cloudInit(){
   await authReady;
-  if(!sb || !cloudUser){ setCloudStatus('📴 بدون انترنت — محفوظ بالجهاز بس', '#8a5a00'); return; }
+  if(!sb || !cloudUser){ setCloudStatus('📴 السحابة مو متصلة — محفوظ بالجهاز بس', '#8a5a00'); return; }
   setCloudStatus('☁️ جاري التحميل...');
-  const { data, error } = await sb.from('app_state').select('key,data');
+  const { data, error } = await sb.rpc('qasm_load', { p_pass: cloudUser.pass });
   if(error){
     console.error('cloud load failed', error);
     setCloudStatus('⚠️ تعذر الاتصال بقاعدة البيانات', '#c33f3f');
