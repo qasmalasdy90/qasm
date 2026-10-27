@@ -1034,21 +1034,43 @@ function remainingDebtOf(sub){
 }
 // دين المشترك حسب لوحة EarthLink: إذا مكتوب "Unpaid" وبملاحظاته "باقي 50 الف"
 // ناخذ المبلغ الباقي، وإذا ماكو ملاحظة نحسب عدد الأشهر الغير مدفوعة × سعر الاشتراك.
-function earthlinkDebtOf(sub){
-  // إذا بالملاحظات مكتوب "باقي N" (مثل: واصل 25 باقي 50 — راوتر وأغراض)،
-  // هذا هو الدين، سواء مكتوب Unpaid لو All Paid. ناخذ آخر "باقي" بالملاحظة.
-  const note = String(sub.elNote||'').replace(/[٠-٩]/g, d=> '٠١٢٣٤٥٦٧٨٩'.indexOf(d))
-                                     .replace(/[۰-۹]/g, d=> '۰۱۲۳۴۵۶۷۸۹'.indexOf(d));
-  const all = [...note.matchAll(/باقي\D{0,8}?(\d+(?:[.,]\d+)?)/g)];
+function debtPartsOf(sub){
+  const elN = String(sub.elNote||''), apN = String(sub.notes||'');
+  const raw = elN + ' ' + (apN.trim() && apN.trim()!==elN.trim() ? apN : '');
+  const note = raw.replace(/[٠-٩]/g, d=> '٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/[۰-۹]/g, d=> '۰۱۲۳۴۵۶۷۸۹'.indexOf(d));
+  const N = x => Number(String(x).replace(',','.'))||0;
   const price = subTypePrices[sub.subType] || Number(sub.price) || 0;
-  const subDebt = (sub.elUnpaid||0) * price;
-  if(all.length){
-    const baqi = Number(all[all.length-1][1].replace(',','.'));
-    // إذا الباقي عن راوتر/أغراض، ينجمع وية دين الاشتراك (إذا الاشتراك Unpaid)
-    if(/راوتر|راوت|روتر|اغراض|أغراض|جهاز|سلك|كيبل/.test(note)) return baqi + subDebt;
-    return baqi;
+  const U = Number(sub.elUnpaid)||0;
+  const parts = [];
+  const routerW = 'راوتر|راوت|روتر|اغراض|أغراض|جهاز|سلك|كيبل';
+  const oldW = 'قديمه|قديمة|قديم|سابق|سابقة';
+  const used = new Set();
+  // قديم: "5 قديمة" أو "قديم 5"
+  let old = 0;
+  for(const m of note.matchAll(new RegExp('(\\d+(?:[.,]\\d+)?)\\s*(?:الف|ألف|آلاف)?\\s*(?:دين\\s*)?(?:'+oldW+')','g'))){ old += N(m[1]); used.add(m.index); }
+  if(!old) for(const m of note.matchAll(new RegExp('(?:'+oldW+')\\D{0,8}?(\\d+(?:[.,]\\d+)?)','g'))) old += N(m[1]);
+  const baqiM = [...note.matchAll(/باقي\D{0,8}?(\d+(?:[.,]\d+)?)/g)];
+  const baqi = baqiM.length ? N(baqiM[baqiM.length-1][1]) : null;
+  const baqiIsRouter = baqiM.length && new RegExp('باقي\\D{0,8}?\\d+(?:[.,]\\d+)?\\s*(?:الف|ألف)?\\s*(?:'+routerW+')').test(note);
+  let router = 0;
+  if(!baqiIsRouter){
+    const r1 = note.match(new RegExp('(?:'+routerW+')\\D{0,10}?(\\d+(?:[.,]\\d+)?)')) || note.match(new RegExp('(\\d+(?:[.,]\\d+)?)\\s*(?:الف|ألف)?\\s*(?:'+routerW+')'));
+    if(r1 && N(r1[1]) !== baqi) router = N(r1[1]);
   }
-  return subDebt;
+  if(baqi !== null){
+    if(baqiIsRouter){ if(U) parts.push({label: U>1? `${U} اشتراك`:'اشتراك', amount:U*price}); parts.push({label:'راوتر', amount:baqi}); }
+    else parts.push({label:'باقي', amount:baqi});
+  } else if(U){
+    const paidM = note.match(/(?:واصل|منطي|منطيني|انطاني|دافع|مستلم)\D{0,8}?(\d+(?:[.,]\d+)?)/);
+    const sd = Math.max(0, U*price - (paidM? N(paidM[1]) : 0));
+    if(sd) parts.push({label: U>1? `${U} اشتراك`:'اشتراك', amount:sd});
+  }
+  if(router) parts.push({label:'راوتر', amount:router});
+  if(old) parts.push({label:'قديمة', amount:old});
+  return parts.filter(x=>x.amount>0);
+}
+function earthlinkDebtOf(sub){
+  return debtPartsOf(sub).reduce((a,x)=>a+x.amount,0);
 }
 // تسديد سريع من قائمة "تذكيرات الدين": يجعل المبلغ الواصل = سعر الاشتراك،
 // ويشيل أي مبلغ دين مكتوب نصياً بالملاحظات (مثلاً "دين 20")، فيصفر الدين
@@ -3330,11 +3352,12 @@ function renderProfitsReport(){
   // بخانة الملاحظات (مثلاً "دين 20") — يُجمع الاثنين مع بعض لنفس المشترك.
   const debtList = allSubs
     .map(s => ({
-      name: s.name,
-      remaining: Math.max(0,(Number(s.price)||0) - (Number(s.paid)||0)) + extractDebtFromNotes(s.notes),
+      name: s.name, sub: s,
+      remaining: remainingDebtOf(s),
       notes: s.notes||''
     }))
-    .filter(x => x.remaining > 0);
+    .filter(x => x.remaining > 0)
+    .sort((a,b)=> b.remaining - a.remaining);
   const debtTotal = debtList.reduce((sum,x)=> sum + x.remaining, 0);
 
   const html = `
@@ -3374,6 +3397,7 @@ function renderProfitsReport(){
       <div style="max-height:220px; overflow-y:auto; border:1px solid #eee; border-radius:8px; padding:6px;">
         ${debtList.map(x=>`<div style="padding:3px 0; border-bottom:1px dashed #eee;">
           ${x.name} — <b style="color:#b3413e;">${fmtMoney(x.remaining)}</b> د.ع
+          ${(()=>{const sb=x.sub; const ps=sb?debtPartsOf(sb):[]; return ps.length>1 ? `<div style="font-size:12px; color:#b3413e;">${ps.map(q=>q.label+' '+fmtMoney(q.amount)).join(' + ')} = ${fmtMoney(x.remaining)}</div>` : '';})()}
         </div>`).join('')}
       </div>
       <div style="margin-top:8px; padding:8px; background:#fdecea; border-radius:8px; font-weight:bold; color:#b3413e;">
