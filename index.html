@@ -705,7 +705,7 @@ async function cloudLogout(){
 const STORE_KEY = 'earthlink-subscribers';
 // المشتركون المستوردون من لوحة EarthLink (صفحة 1 وصفحة 2) — مضمّنون هنا كبيانات ابتدائية.
 // ملاحظة: تاريخ الاشتراك محسوب تقديرياً (30 يوم بالتمام قبل تاريخ الانتهاء، مو شهر تقويمي) لأن ملف EarthLink الأصلي ما كان فيه تاريخ اشتراك فعلي.
-// السعر معبّى حسب نوع الاشتراك: Economy=35, Plus=40, Standard=50, Turbo=65, Business Pro=120.
+// السعر معبّى حسب نوع الاشتراك: Economy=35, Plus=40, Standard=45, Turbo=60, Business Pro=120.
 // إذا كان هذا المتصفح عنده بيانات محفوظة مسبقاً (من استخدام سابق لهذا التطبيق)، تلك البيانات
 // المحفوظة هي الي بتظهر بدل هذي (loadState تقرأ من التخزين المحلي أولاً)، مو هذي القائمة المضمّنة.
 const SEED_STATE = {"subscribers": [], "nextReceiptNo": 332};
@@ -820,6 +820,19 @@ function slimState(st){
     }
     return v;
   }));
+}
+// يصحح سعر كل مشترك حسب الجدول (Standard=45، Turbo=60...) حتى الديون تطلع صح
+function fixPrices(){
+  (state.subscribers||[]).forEach(function(sub){
+    const correct = subTypePrices[sub.subType];
+    if(correct === undefined) return;
+    const old = Number(sub.price)||0;
+    if(old === correct) return;
+    const paid = Number(sub.paid)||0;
+    if(paid >= old) sub.paid = correct;          // جان مسدد كامل ← يبقى مسدد
+    else sub.paid = Math.min(paid, correct);
+    sub.price = correct;
+  });
 }
 function hydratePhotos(){
   (state.subscribers||[]).forEach(function(sub){
@@ -998,8 +1011,16 @@ function hoursLeft(sub){
 // Same window used for the "قريباً" status tag on each subscriber card — a subscriber
 // counts as expiring-soon here the moment their status tag turns "قريباً", so the
 // reminders badge number always matches what the list itself shows.
+// بس اللي باقيله يوم (٢٤ ساعة) أو أقل وبعده ما خلص — المنتهي ما يطلع
 function isExpiringSoon(sub){
-  return hoursLeft(sub) <= 72;
+  const h = hoursLeft(sub);
+  return h > 0 && h <= 24;
+}
+function fmtHoursLeft(sub){
+  const mins = Math.max(0, Math.round(hoursLeft(sub) * 60));
+  const h = Math.floor(mins / 60), m = mins % 60;
+  if(h === 0) return `باقي ${m} دقيقة`;
+  return m ? `باقي ${h} ساعة و${m} دقيقة` : `باقي ${h} ساعة`;
 }
 // دالة موحّدة لحساب الدين المتبقي على مشترك: الباقي من سعر الاشتراك (سعر - واصل)
 // زائد أي مبلغ دين إضافي مكتوب نصياً بخانة الملاحظات (مثلاً "دين 20").
@@ -1014,12 +1035,20 @@ function remainingDebtOf(sub){
 // دين المشترك حسب لوحة EarthLink: إذا مكتوب "Unpaid" وبملاحظاته "باقي 50 الف"
 // ناخذ المبلغ الباقي، وإذا ماكو ملاحظة نحسب عدد الأشهر الغير مدفوعة × سعر الاشتراك.
 function earthlinkDebtOf(sub){
-  if(!sub.elUnpaid) return 0;
-  const note = String(sub.elNote||'').replace(/[٠-٩]/g, d=> '٠١٢٣٤٥٦٧٨٩'.indexOf(d));
-  const m = note.match(/باقي\D{0,6}?(\d+)/);
-  if(m) return Number(m[1]);
-  const price = Number(sub.price) || subTypePrices[sub.subType] || 0;
-  return sub.elUnpaid * price;
+  // إذا بالملاحظات مكتوب "باقي N" (مثل: واصل 25 باقي 50 — راوتر وأغراض)،
+  // هذا هو الدين، سواء مكتوب Unpaid لو All Paid. ناخذ آخر "باقي" بالملاحظة.
+  const note = String(sub.elNote||'').replace(/[٠-٩]/g, d=> '٠١٢٣٤٥٦٧٨٩'.indexOf(d))
+                                     .replace(/[۰-۹]/g, d=> '۰۱۲۳۴۵۶۷۸۹'.indexOf(d));
+  const all = [...note.matchAll(/باقي\D{0,8}?(\d+(?:[.,]\d+)?)/g)];
+  const price = subTypePrices[sub.subType] || Number(sub.price) || 0;
+  const subDebt = (sub.elUnpaid||0) * price;
+  if(all.length){
+    const baqi = Number(all[all.length-1][1].replace(',','.'));
+    // إذا الباقي عن راوتر/أغراض، ينجمع وية دين الاشتراك (إذا الاشتراك Unpaid)
+    if(/راوتر|راوت|روتر|اغراض|أغراض|جهاز|سلك|كيبل/.test(note)) return baqi + subDebt;
+    return baqi;
+  }
+  return subDebt;
 }
 // تسديد سريع من قائمة "تذكيرات الدين": يجعل المبلغ الواصل = سعر الاشتراك،
 // ويشيل أي مبلغ دين مكتوب نصياً بالملاحظات (مثلاً "دين 20")، فيصفر الدين
@@ -1030,6 +1059,7 @@ function markDebtPaid(subId){
   if(!sub) return;
   sub.paid = Number(sub.price)||0;
   sub.elUnpaid = 0;
+  sub.elNote = ''; // يشيل "باقي" لحد اللصقة الجاية
   if(sub.notes) sub.notes = sub.notes.replace(/دين\D{0,10}?[\d,\.]+/g, '').trim();
   saveState();
   render();
@@ -1047,7 +1077,7 @@ function renderReminders(){
   if(soon.length){
     html += `
     <button type="button" id="btnReminders" style="width:100%; text-align:right; background:#fbf0dd; border:1px solid var(--warn); color:var(--warn); border-radius:9px; padding:9px 12px; font-family:'Tajawal',sans-serif; font-weight:700; font-size:12.5px; cursor:pointer; margin-bottom:6px;">
-      🔔 ${soon.length} مشترك قارب اشتراكه على الانتهاء — إرسال تذكير
+      🔔 ${soon.length} مشترك باقيله يوم أو أقل — إرسال تذكير
     </button>`;
   }
   if(debtors.length){
@@ -1086,7 +1116,7 @@ function openExpiryRemindersModal(){
             <div style="border:1px solid var(--line); border-radius:9px; padding:10px; display:flex; justify-content:space-between; align-items:center; gap:8px;">
               <div>
                 <div style="font-weight:700;">${escapeHtml(s.name)}</div>
-                <div class="hint" style="margin:2px 0 0;">${hoursLeft(s)<0 ? 'منتهي منذ' : 'ينتهي'} ${fmtDateTime(s.expiryDate, s.expiryTime)}</div>
+                <div class="hint" style="margin:2px 0 0;">⏳ ${fmtHoursLeft(s)} — ينتهي ${fmtDateTime(s.expiryDate, s.expiryTime)}</div>
                 ${!s.phone ? `<div class="hint" style="margin:2px 0 0; color:var(--bad);">⚠️ لا يوجد رقم هاتف</div>` : ''}
                 ${s.phone && alreadySentForThisExpiry ? `<div class="hint" style="margin:2px 0 0; color:var(--ok);">✅ تم إرسال التذكير عن هذا الاشتراك</div>` : ''}
               </div>
@@ -1399,6 +1429,7 @@ function showSavedToast(msg, durationMs){
 
 // ---------- rendering: sidebar list ----------
 function render(){
+  fixPrices();
   hydratePhotos();
   updateRenewedMsgsCount();
   renderList();
@@ -1514,7 +1545,7 @@ function renderMain(){
             ? `<img src="${sub.photo}" alt="صورة المشترك">
                ${sub.photos && sub.photos.length>1 ? `<div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:8px;">${sub.photos.map(p=>`<img src="${p.src}" style="width:56px;height:56px;object-fit:cover;border-radius:8px;border:1px solid var(--line);">`).join('')}</div>` : ''}
                <div class="photo-date">${escapeHtml(sub.name)}</div>
-               <div class="hint" style="margin:2px 0 0;">من ${fmtDateTime(sub.subscriptionDate, sub.subscriptionTime)} الى ${fmtDateTime(sub.expiryDate, sub.expiryTime)}</div>
+               <div class="hint" style="margin:2px 0 0;">من ${fmtDateTime(sub.subscriptionDate, sub.expiryTime||sub.subscriptionTime)} الى ${fmtDateTime(sub.expiryDate, sub.expiryTime)}</div>
                <div class="hint" style="margin:2px 0 0;">التُقطت الصورة بتاريخ: ${fmtDate(sub.photoDate)}</div>`
             : `<div class="hint">لم تُلتقط صورة لهذا الاشتراك بعد. اضغط "التقاط صورة الاشتراك" أعلاه.</div>` }
         </div>
@@ -1674,7 +1705,7 @@ function cardTemplate(sub, kind){
         <div class="rc-icon">🔴</div>
         <div class="rc-greeting">عزيزي المشترك ${escapeHtml(sub.name)}</div>
         <div class="rc-body">
-          تاريخ الاشتراك: <b>${fmtDateTime(sub.subscriptionDate, sub.subscriptionTime)}</b><br>
+          تاريخ الاشتراك: <b>${fmtDateTime(sub.subscriptionDate, sub.expiryTime||sub.subscriptionTime)}</b><br>
           تاريخ انتهاء الاشتراك: <b>${fmtDateTime(sub.expiryDate, sub.expiryTime)}</b><br>
           يوجد بذمتكم دين لم يسدد بمبلغ: <b>${fmtMoney(remaining)} د.ع</b>
         </div>
@@ -1847,7 +1878,7 @@ function receiptTemplate(sub){
       <div class="r-row"><span class="k">نوع الخط</span><span class="v">${escapeHtml(sub.lineType||'—')}</span></div>
       <div class="r-row"><span class="k">نوع الاشتراك</span><span class="v ltr">${escapeHtml(sub.subType||'—')}</span></div>
       <div class="r-row"><span class="k">رمز الراوتر</span><span class="v ltr">${escapeHtml(sub.routerCode||'—')}</span></div>
-      <div class="r-row"><span class="k">تاريخ الاشتراك</span><span class="v">${fmtDateTime(sub.subscriptionDate, sub.subscriptionTime)}</span></div>
+      <div class="r-row"><span class="k">تاريخ الاشتراك</span><span class="v">${fmtDateTime(sub.subscriptionDate, sub.expiryTime||sub.subscriptionTime)}</span></div>
       <div class="r-row"><span class="k">تاريخ الانتهاء</span><span class="v">${fmtDateTime(sub.expiryDate, sub.expiryTime)}</span></div>
       <div class="r-row"><span class="k">سعر الاشتراك</span><span class="v">${sub.price||0} د.ع</span></div>
       <div class="r-row"><span class="k">💰 المبلغ الواصل</span><span class="v">${sub.paid||0} د.ع</span></div>
@@ -1864,7 +1895,7 @@ function receiptTemplate(sub){
         علماً الدين ممنوع بدون حراج رجاءً
       </div>
     </div>
-    ${sub.photo ? `<div class="r-photo-strip"><img src="${sub.photo}" alt="صورة الاشتراك"><span>${escapeHtml(sub.name)} — من ${fmtDateTime(sub.subscriptionDate, sub.subscriptionTime)} الى ${fmtDateTime(sub.expiryDate, sub.expiryTime)}<br>صورة بتاريخ ${fmtDate(sub.photoDate)}</span></div>` : ''}
+    ${sub.photo ? `<div class="r-photo-strip"><img src="${sub.photo}" alt="صورة الاشتراك"><span>${escapeHtml(sub.name)} — من ${fmtDateTime(sub.subscriptionDate, sub.expiryTime||sub.subscriptionTime)} الى ${fmtDateTime(sub.expiryDate, sub.expiryTime)}<br>صورة بتاريخ ${fmtDate(sub.photoDate)}</span></div>` : ''}
     <div class="r-footer">يرجى الاحتفاظ بهذا الوصل — تصميم قاسم الاسدي 07705663837</div>
   </div>`;
 }
@@ -2085,7 +2116,7 @@ function bindForm(sub){
       subType: document.getElementById('f_subType').value,
       routerCode: document.getElementById('f_routerCode').value.trim(),
       subscriptionDate: document.getElementById('f_subDate').value,
-      subscriptionTime: readTimePicker('f_subTime'),
+      subscriptionTime: readTimePicker('f_expTime') || readTimePicker('f_subTime'),
       expiryDate: document.getElementById('f_expDate').value,
       expiryTime: readTimePicker('f_expTime'),
       price: Number(document.getElementById('f_price').value)||0,
@@ -2611,7 +2642,7 @@ function openPhotoModal(sub){
         <h3>صورة اشتراك: ${escapeHtml(sub.name)}</h3>
         <div class="hint" style="line-height:1.9;">
           الاسم: <b>${escapeHtml(sub.name)}</b><br>
-          تاريخ البداية: <b>${fmtDateTime(sub.subscriptionDate, sub.subscriptionTime)}</b> &nbsp;|&nbsp; تاريخ النهاية: <b>${fmtDateTime(sub.expiryDate, sub.expiryTime)}</b><br>
+          تاريخ البداية: <b>${fmtDateTime(sub.subscriptionDate, sub.expiryTime||sub.subscriptionTime)}</b> &nbsp;|&nbsp; تاريخ النهاية: <b>${fmtDateTime(sub.expiryDate, sub.expiryTime)}</b><br>
           التقط صورة الآن أو اختر صورة (أو أكثر من صورة معاً) — سيُسجَّل تاريخ اليوم تلقائياً معها وتُربط بهذه المعلومات.
         </div>
         <div class="field">
@@ -2954,7 +2985,10 @@ function extractRowsFromEarthlinkBlocks(raw){
     const acc = b.match(/Acc\. Name[ \t]*:[ \t]*([^\n]+)/i);
     const mob = b.match(/^[ \t]*Mobile[ \t]*:[ \t]*(07\d{9})/mi);
     const mob2 = b.match(/^[ \t]*Mobile 2[ \t]*:[ \t]*(07\d{9})/mi);
-    const unp = b.match(/Payment[ \t]*:[ \t]*(\d+)[ \t]*Unpaid/i);
+    // يقبل: "2 Unpaid" أو "Unpaid" أو "Not Paid" = مو مسدد، و"Paid"/"All Paid" = مسدد
+    const payLine = (b.match(/Payment[ \t]*:[ \t]*([^\n]*)/i)||[])[1] || '';
+    const unpN = payLine.match(/(\d+)[ \t]*(?:Unpaid|Not[ \t]*Paid)/i);
+    const unp = unpN ? unpN : (/Unpaid|Not[ \t]*Paid/i.test(payLine) ? [null,'1'] : null);
     const un = b.match(/User Notes[ \t]*:[ \t]*([^\n]*)/i);
     out.push({
       username: um[1],
@@ -3046,8 +3080,8 @@ function mergeEarthlinkRows(rows){
       if(r.unpaid!=null){
         const wasUnpaid = existing.elUnpaid > 0;
         existing.elUnpaid = r.unpaid; existing.elNote = r.userNotes||'';
-        const price = Number(existing.price) || subTypePrices[existing.subType] || 0;
-        if(!existing.price && price) existing.price = price;
+        const price = subTypePrices[existing.subType] || Number(existing.price) || 0;
+        if(price) existing.price = price;
         if(r.unpaid > 0){
           // باللوحة مو مسدد ← هنا هم يصير مو مسدد
           existing.paid = Math.max(0, price - earthlinkDebtOf(existing));
@@ -3072,7 +3106,7 @@ function mergeEarthlinkRows(rows){
         lineType: 'EarthLink Wireless',
         subType: (r.accName && subTypes.includes(r.accName)) ? r.accName : 'Plus', routerCode: '',
         renewedAt: (r.refillDays!=null) ? addDays(today, -r.refillDays) : today,
-        subscriptionDate: (r.refillDays!=null) ? addDays(today, -r.refillDays) : today, subscriptionTime: nowTime(),
+        subscriptionDate: (r.refillDays!=null) ? addDays(today, -r.refillDays) : today, subscriptionTime: parsed? parsed.time : '',
         expiryDate: parsed? parsed.date : today, expiryTime: parsed? parsed.time : '',
         price: subTypePrices[(r.accName && subTypes.includes(r.accName)) ? r.accName : 'Plus'] || 0,
         paid: r.unpaid ? 0 : (subTypePrices[(r.accName && subTypes.includes(r.accName)) ? r.accName : 'Plus'] || 0),
