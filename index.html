@@ -1065,6 +1065,12 @@ function debtPartsOf(sub){
     const sd = Math.max(0, U*price - (paidM? N(paidM[1]) : 0));
     if(sd) parts.push({label: U>1? `${U} اشتراك`:'اشتراك', amount:sd});
   }
+  // أي رقم ثاني بالملاحظة (مثل "5 الاف") ينحسب دين إضافي فوق الاشتراك
+  if(!old && baqi === null){
+    const rest = note.replace(new RegExp('(?:واصل|منطي|منطيني|انطاني|دافع|مستلم|'+routerW+')\\D{0,10}?\\d+(?:[.,]\\d+)?','g'),' ')
+                     .replace(new RegExp('\\d+(?:[.,]\\d+)?\\s*(?:الف|ألف|آلاف|الاف)?\\s*(?:'+routerW+')','g'),' ');
+    for(const m of rest.matchAll(/(\d+(?:[.,]\d+)?)/g)) old += N(m[1]);
+  }
   if(router) parts.push({label:'راوتر', amount:router});
   if(old) parts.push({label:'قديمة', amount:old});
   return parts.filter(x=>x.amount>0);
@@ -1112,6 +1118,30 @@ function renderReminders(){
   if(soon.length) document.getElementById('btnReminders').onclick = openExpiryRemindersModal;
   if(debtors.length) document.getElementById('btnDebtReminders').onclick = openDebtRemindersModal;
 }
+
+// ---------- إضافة رقم من نافذة التذكير، وبعد الحفظ يرجع لنفس النافذة ----------
+let returnToReminders = null;
+document.addEventListener('click', (e)=>{
+  const b = e.target.closest('.add-phone');
+  if(!b) return;
+  e.preventDefault();
+  returnToReminders = { kind: b.dataset.from, id: b.dataset.id };
+  document.getElementById('modalHost').innerHTML = '';
+  activeId = b.dataset.id; mode = 'edit'; render();
+  setTimeout(()=>{ const f = document.getElementById('f_phone'); if(f){ f.scrollIntoView({behavior:'smooth', block:'center'}); f.focus(); } }, 150);
+});
+function backToRemindersIfNeeded(){
+  if(!returnToReminders) return false;
+  const r = returnToReminders; returnToReminders = null;
+  if(r.kind === 'debt') openDebtRemindersModal(); else if(r.kind === 'renewed') openRenewedMsgs(); else openExpiryRemindersModal();
+  setTimeout(()=>{
+    const el = document.querySelector(`#modalHost [data-id="${r.id}"]`);
+    const row = el && (el.closest('div[style*="border:1px solid"]') || el.parentElement.parentElement);
+    if(row){ row.scrollIntoView({block:'center'}); row.style.background = '#fff8dc'; }
+  }, 60);
+  return true;
+}
+
 function openExpiryRemindersModal(){
   const host = document.getElementById('modalHost');
   const soon = state.subscribers.filter(isExpiringSoon).sort((a,b)=> hoursLeft(a)-hoursLeft(b));
@@ -1139,7 +1169,7 @@ function openExpiryRemindersModal(){
               <div>
                 <div style="font-weight:700;">${escapeHtml(s.name)}</div>
                 <div class="hint" style="margin:2px 0 0;">⏳ ${fmtHoursLeft(s)} — ينتهي ${fmtDateTime(s.expiryDate, s.expiryTime)}</div>
-                ${!s.phone ? `<div class="hint" style="margin:2px 0 0; color:var(--bad);">⚠️ لا يوجد رقم هاتف</div>` : ''}
+                ${!s.phone ? `<button type="button" class="add-phone" data-id="${s.id}" data-from="expiry" style="margin-top:4px; padding:5px 9px; border:1px dashed var(--bad); border-radius:7px; background:#fff5f4; color:var(--bad); font-family:inherit; font-weight:700; cursor:pointer;">⚠️ لا يوجد رقم هاتف — اضغط لإضافة رقم</button>` : ''}
                 ${s.phone && alreadySentForThisExpiry ? `<div class="hint" style="margin:2px 0 0; color:var(--ok);">✅ تم إرسال التذكير عن هذا الاشتراك</div>` : ''}
               </div>
               ${btnHtml}
@@ -1176,14 +1206,14 @@ function openDebtRemindersModal(){
           ${debtors.length ? debtors.map(s=>{
             const remaining = remainingDebtOf(s);
             const sendBtnHtml = !s.phone
-              ? `<button type="button" class="tbtn" disabled style="white-space:nowrap; opacity:.5; cursor:not-allowed;">🔴 إرسال تذكير دين</button>`
+              ? ``
               : `<button type="button" class="tbtn danger debt-send" data-id="${s.id}" style="white-space:nowrap;">🔴 إرسال تذكير دين</button>`;
             return `
             <div style="border:1px solid var(--line); border-radius:9px; padding:10px; display:flex; justify-content:space-between; align-items:center; gap:8px;">
               <div>
                 <div style="font-weight:700;">${escapeHtml(s.name)}</div>
                 <div class="hint" style="margin:2px 0 0; color:var(--bad);">الدين المتبقي: ${fmtMoney(remaining)} د.ع</div>
-                ${!s.phone ? `<div class="hint" style="margin:2px 0 0; color:var(--bad);">⚠️ لا يوجد رقم هاتف</div>` : ''}
+                ${!s.phone ? `<button type="button" class="add-phone" data-id="${s.id}" data-from="debt" style="margin-top:4px; padding:5px 9px; border:1px dashed var(--bad); border-radius:7px; background:#fff5f4; color:var(--bad); font-family:inherit; font-weight:700; cursor:pointer;">⚠️ لا يوجد رقم هاتف — اضغط لإضافة رقم</button>` : ''}
               </div>
               <div style="display:flex; flex-direction:column; gap:6px; align-items:flex-end;">
                 ${sendBtnHtml}
@@ -2126,7 +2156,7 @@ function bindForm(sub){
     const price = subTypePrices[e.target.value];
     if(price !== undefined) document.getElementById('f_price').value = price;
   });
-  document.getElementById('btnCancel').onclick = ()=>{ mode = sub?'view':'new'; if(!sub){activeId=null;} mode='view'; if(!sub){document.getElementById('main').innerHTML=`<div class="main-empty"></div>`; return;} render(); };
+  document.getElementById('btnCancel').onclick = ()=>{ if(returnToReminders){ mode='view'; render(); backToRemindersIfNeeded(); return; } mode = sub?'view':'new'; if(!sub){activeId=null;} mode='view'; if(!sub){document.getElementById('main').innerHTML=`<div class="main-empty"></div>`; return;} render(); };
   document.getElementById('btnSave').onclick = async ()=>{
     const isNewSub = !sub;
     const lastPhoto = currentPhoto();
@@ -2180,6 +2210,7 @@ function bindForm(sub){
     } else {
       mode = 'view';
       render();
+      if(backToRemindersIfNeeded()) return;
       // Editing an existing subscriber: show the updated receipt so the edit is confirmed.
       document.getElementById('main').scrollIntoView({ behavior:'smooth', block:'start' });
     }
@@ -3193,9 +3224,9 @@ function openRenewedMsgs(){
           <div style="flex:1; min-width:0;">
             <div style="font-weight:700;">${escapeHtml(sub.name||sub.nameEn||'')}</div>
             <div style="font-size:12px; color:var(--muted);">جدد ${agoTxt(renewedOnOf(sub))} · ${escapeHtml(sub.subType||'')} · ينتهي ${fmtDate(sub.expiryDate)}</div>
-            ${sub.phone ? '' : '<div style="font-size:12px; color:var(--bad); font-weight:700;">ما عنده رقم مسجل</div>'}
+            ${sub.phone ? '' : `<button type="button" class="add-phone" data-id="${sub.id}" data-from="renewed" style="margin-top:4px; padding:5px 9px; border:1px dashed var(--bad); border-radius:7px; background:#fff5f4; color:var(--bad); font-family:inherit; font-weight:700; cursor:pointer;">⚠️ لا يوجد رقم هاتف — اضغط لإضافة رقم</button>`}
           </div>
-          <button class="tbtn primary" data-send="${sub.id}" ${sub.phone?'':'disabled style="opacity:.5"'}>📲 إرسال</button>
+          ${sub.phone ? `<button class="tbtn primary" data-send="${sub.id}">📲 إرسال</button>` : ''}
           <button class="tbtn" data-done="${sub.id}" title="شيله من القائمة بدون إرسال">✓</button>
         </div>`).join('') : '<div class="empty-list">✅ ماكو مجددين ينتظرون رسالة</div>'}
       <button class="tbtn" id="btnRenewedMsgsClose" style="width:100%; margin-top:8px;">إغلاق</button>
