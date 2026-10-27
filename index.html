@@ -422,8 +422,9 @@
     padding:12px 20px 10px;
     margin:6px 6px 0;
     border-radius:6px 6px 0 0;
+    display:flex; justify-content:space-between; align-items:flex-start; gap:10px;
   }
-  .r-header .shop{font-family:'Cairo',sans-serif; font-weight:800; font-size:17px;}
+  .r-header .shop{font-family:'Cairo',sans-serif; font-weight:800; font-size:16px; white-space:nowrap;}
   .r-header .owner{font-size:11.5px; opacity:.9;}
   .r-header .phones{font-size:11.5px; opacity:.9; margin-top:3px; direction:ltr; text-align:left;}
   .r-logo{
@@ -1142,6 +1143,31 @@ function backToRemindersIfNeeded(){
   return true;
 }
 
+
+// ---------- بحث بالاسم داخل نوافذ التذكير ----------
+function addModalSearch(anchorEl){
+  if(!anchorEl) return;
+  const old = document.getElementById('modalSearch'); if(old) old.remove();
+  const inp = document.createElement('input');
+  inp.id = 'modalSearch'; inp.type = 'search';
+  inp.placeholder = '🔍 ابحث بالاسم أو الرقم...';
+  inp.style.cssText = 'width:100%; box-sizing:border-box; margin:8px 0; padding:10px 12px; border:1.5px solid var(--teal,#0b7a8a); border-radius:10px; font-family:inherit; font-size:15px;';
+  anchorEl.parentNode.insertBefore(inp, anchorEl);
+  const host = anchorEl.closest('#modalHost,#renewedMsgsModal') || document.getElementById('modalHost');
+  const rows = ()=> [...host.querySelectorAll('div[style*="border:1px solid var(--line)"]')]
+    .filter(r=> r.querySelector('[data-id],[data-send],.add-phone'));
+  const norm = t=> String(t||'').replace(/[أإآ]/g,'ا').replace(/ة/g,'ه').replace(/ى/g,'ي').toLowerCase();
+  inp.addEventListener('input', ()=>{
+    const q = norm(inp.value.trim());
+    rows().forEach(r=>{
+      const id = (r.querySelector('[data-id],[data-send]')||{}).dataset || {};
+      const sub = state.subscribers.find(x=> x.id === (id.id||id.send));
+      const hay = norm(r.textContent + ' ' + (sub ? (sub.phone||'')+' '+(sub.nameEn||'') : ''));
+      r.style.display = !q || hay.includes(q) ? '' : 'none';
+    });
+  });
+}
+
 function openExpiryRemindersModal(){
   const host = document.getElementById('modalHost');
   const soon = state.subscribers.filter(isExpiringSoon).sort((a,b)=> hoursLeft(a)-hoursLeft(b));
@@ -1187,6 +1213,7 @@ function openExpiryRemindersModal(){
     const sub = state.subscribers.find(s=>s.id===btn.dataset.id);
     if(sub) shareCardImage(sub, btn, 'reminder');
   });
+  addModalSearch(document.getElementById('rem_list'));
 }
 // نافذة الديون مستقلة تماماً عن نافذة تذكير الانتهاء. بجنب كل مشترك زرّين:
 // "🔴 إرسال تذكير دين" (يفتح واتساب بصورة تذكير)، و"✅ تسديد" الصغير — بضغطة
@@ -1254,6 +1281,7 @@ function openDebtRemindersModal(){
       }
     }
   });
+  addModalSearch(document.getElementById('debt_list'));
 }
 
 // ---------- storage ----------
@@ -1744,6 +1772,19 @@ async function shareReceiptImage(sub){
   }
 }
 
+
+// ---------- رقم الماستر للتحويل — يطلع بكل الوصولات ----------
+const MASTER_CARD_NO = '2394786442';
+const MASTER_CARD_NAME = 'QASIM M. RASHED';
+function payBoxHtml(){
+  return `<div class="pay-box" style="margin:0; text-align:left; line-height:1.5; color:inherit;">
+    <div style="font-size:10px; font-weight:400; opacity:.9; direction:rtl; text-align:left; white-space:nowrap;">تكدر تحول المبلغ على رقم الماستر</div>
+    <div style="direction:ltr; font-size:12px; font-weight:700; letter-spacing:.5px; white-space:nowrap;">${MASTER_CARD_NAME}</div>
+    <div style="direction:ltr; font-size:13px; font-weight:700; letter-spacing:1px; white-space:nowrap;">${MASTER_CARD_NO} 💳</div>
+    <div style="direction:ltr; font-size:11.5px; opacity:.9; white-space:nowrap;">07705663837 📞</div>
+  </div>`;
+}
+
 function cardTemplate(sub, kind){
   const shop = shopName() || 'قاسم الاسدي للانترنت';
   if(kind === 'debt'){
@@ -1752,7 +1793,7 @@ function cardTemplate(sub, kind){
       <div class="reminder-card kind-debt">
         <div class="rc-header">
           <div class="rc-shop">${escapeHtml(shop)}</div>
-          <div class="rc-phone">📞 07705663837</div>
+          ${payBoxHtml()}
         </div>
         <div class="rc-icon">🔴</div>
         <div class="rc-greeting">عزيزي المشترك ${escapeHtml(sub.name)}</div>
@@ -1770,7 +1811,7 @@ function cardTemplate(sub, kind){
       <div class="reminder-card kind-renewed">
         <div class="rc-header">
           <div class="rc-shop">${escapeHtml(shop)}</div>
-          <div class="rc-phone">📞 07705663837</div>
+          ${payBoxHtml()}
         </div>
         <div class="rc-icon">✅</div>
         <div class="rc-greeting">عزيزي المشترك ${escapeHtml(sub.name)}</div>
@@ -1786,7 +1827,7 @@ function cardTemplate(sub, kind){
     <div class="reminder-card">
       <div class="rc-header">
         <div class="rc-shop">${escapeHtml(shop)}</div>
-        <div class="rc-phone">📞 07705663837</div>
+        ${payBoxHtml()}
       </div>
       <div class="rc-icon">⏰</div>
       <div class="rc-greeting">عزيزي المشترك ${escapeHtml(sub.name)}</div>
@@ -1911,13 +1952,13 @@ function printReceipt(){
 
 function receiptTemplate(sub){
   const st = statusOf(sub);
-  const remaining = (Number(sub.price)||0) - (Number(sub.paid)||0);
+  const remaining = remainingDebtOf(sub);
   return `
   <div class="receipt">
     <div class="r-header">
-      <div class="shop">قاسم الاسدي للانترنت</div>
-      <div class="owner">وصل حساب اشتراك انترنت</div>
-      <div class="phones">07705663837</div>
+      <div><div class="shop">قاسم الاسدي للانترنت</div>
+      <div class="owner">وصل حساب اشتراك انترنت</div></div>
+      ${payBoxHtml()}
     </div>
     <div class="r-logo">
       <div class="word"><span>EARTH</span><span>LINK</span></div>
@@ -3259,6 +3300,7 @@ document.getElementById('btnRenewedMsgs').addEventListener('click', openRenewedM
 document.getElementById('btnProfits').addEventListener('click', renderProfitsReport);
 document.getElementById('btnProfitsClose').addEventListener('click', ()=>{
   document.getElementById('profitsModal').style.display = 'none';
+  addModalSearch((document.querySelector('#renewedMsgsModal div[style*="border:1px solid var(--line)"]') || document.getElementById('btnRenewedMsgsClose')));
 });
 
 function fmtMoney(n){
