@@ -641,6 +641,7 @@ async function cloudLogout(){
     <button class="add-btn" id="btnDeleteOld" style="background:#b3413e; font-size:12.5px; padding:9px 6px;">🗑️ حذف المشتركين القدامى (منتهي أكثر من شهر)</button>
     <button class="add-btn" id="btnRenewedMsgs" style="background:#25a35a; font-size:13px; padding:10px 6px;">📲 رسائل المجددين <span id="renewedMsgsCount" style="background:#fff; color:#1e7a45; border-radius:999px; padding:0 8px; margin-inline-start:4px; font-weight:800;">0</span></button>
     <button class="add-btn" id="btnProfits" style="background:#1e8a5f; font-size:13px; padding:10px 6px;">💰 الأرباح والديون</button>
+    <button class="add-btn" id="btnSectors" style="background:#5b3fa8; font-size:13px; padding:10px 6px;">📡 السكاتر والأبراج</button>
     <div style="display:flex; align-items:center; gap:6px;">
       <div id="cloudStatus" style="flex:1; font-size:12px; color:#7a7267; text-align:center; padding:2px 0;">☁️ ...</div>
       <button class="add-btn" id="btnLogout" style="background:#888; font-size:12px; padding:6px 10px; width:auto;">🚪 خروج</button>
@@ -684,6 +685,23 @@ async function cloudLogout(){
         <h3 style="margin:0 0 10px; color:#1e8a5f;">💰 الأرباح والديون</h3>
         <div id="profitsContent" style="font-size:13.5px; line-height:1.9;"></div>
         <button class="add-btn" id="btnProfitsClose" style="width:100%; background:#888; padding:10px; margin-top:12px;">إغلاق</button>
+      </div>
+    </div>
+
+    <div id="sectorsModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:9999; padding:16px; overflow-y:auto;">
+      <div style="background:#fff; border-radius:12px; padding:16px; max-width:560px; margin:20px auto;">
+        <h3 style="margin:0 0 6px; color:#5b3fa8;">📡 السكاتر والأبراج</h3>
+        <div style="font-size:12.5px; line-height:1.9; color:#8a5a00; background:#fff8e8; border:1px solid #f0d9a8; border-radius:8px; padding:8px 10px; margin:0 0 10px;">⚠️ شغّل برنامج الـVPN مال الشركة أول، بعدين اضغط "فتح" على السكتر.</div>
+        <div id="sectorsContent"></div>
+        <div style="border-top:1px solid #eee; margin-top:12px; padding-top:10px;">
+          <div style="font-weight:700; color:#5b3fa8; margin-bottom:6px;">➕ إضافة سكتر</div>
+          <input id="sec_tower" list="sec_towers_list" placeholder="اسم البرج (مثلاً: البرج الأول)" style="width:100%; padding:9px; border:1px solid #ccc; border-radius:8px; margin-bottom:6px; font-family:Tajawal,sans-serif; box-sizing:border-box;">
+          <datalist id="sec_towers_list"></datalist>
+          <input id="sec_name" placeholder="اسم السكتر (مثلاً: ssco)" style="width:100%; padding:9px; border:1px solid #ccc; border-radius:8px; margin-bottom:6px; font-family:Tajawal,sans-serif; box-sizing:border-box;">
+          <input id="sec_ip" placeholder="الآيبي (مثلاً: 10.29.199.5)" inputmode="decimal" style="width:100%; padding:9px; border:1px solid #ccc; border-radius:8px; margin-bottom:6px; direction:ltr; text-align:left; box-sizing:border-box;">
+          <button class="add-btn" id="btnSectorAdd" style="width:100%; background:#5b3fa8; padding:10px;">💾 حفظ السكتر</button>
+        </div>
+        <button class="add-btn" id="btnSectorsClose" style="width:100%; background:#888; padding:10px; margin-top:12px;">إغلاق</button>
       </div>
     </div>
 
@@ -1510,6 +1528,7 @@ function showSavedToast(msg, durationMs){
 // ---------- rendering: sidebar list ----------
 function render(){
   fixPrices();
+  applyLineTypes();
   hydratePhotos();
   updateRenewedMsgsCount();
   renderList();
@@ -3298,6 +3317,124 @@ document.getElementById('btnRenewedMsgs').addEventListener('click', openRenewedM
 
 // ---------- الأرباح والديون ----------
 document.getElementById('btnProfits').addEventListener('click', renderProfitsReport);
+// ---------- السكاتر والأبراج ----------
+function ensureTowers(){
+  if(!Array.isArray(state.towers)){
+    state.towers = [{ id:'t1', name:'البرج الأول vzggx2', sectors:[{ id:'s5', name:'ssco', ip:'10.29.199.5' }].concat(Array.from({length:16},(_,i)=>({ id:'s'+(i+6), name:'سكتر '+(i+6), ip:'10.29.199.'+(i+6) }))) }, { id:'t2', name:'البرج الثاني vzgg3', sectors:Array.from({length:7},(_,i)=>({ id:'v'+(i+10), name:'سكتر '+(i+10), ip:'10.38.183.'+(i+10) })) }];
+    saveState();
+  }
+  return state.towers;
+}
+// تصحيحات قاسم: هذولي على الضوئي أو قدماء/منتهين — ما ياخذون آيبي
+const IP_SKIP = ['ha30@vzggx2','basm30@vzggx2','h40@vzggx2','h45@vzggx2','alireaz65@vzggx2','mslm96@vzggx2','azem98@vzggx2','kes150@vzggx2','h5@zgg3','h5@vzgg3','md77@vzgg3','a76@vzgg3'];
+// رقم آيبي يختلف عن الرقم اللي بالاسم
+const IP_FIX = { 'k75@vzgg3': 76 };
+// ---------- تصنيف قاسم: ضوئي / وايرلس (يتطبق مرة وحدة) ----------
+const LINE_CLASS = {"s54@vzggx2": "W", "md77@vzgg3": "W", "h29@vzgg3": "W", "a124@vzggx2": "W", "flah4@vzggx2": "F", "karar186@vzggx2": "F", "a12@vzggx2": "F", "m107@vzggx2": "F", "k2@vzgg3": "F", "hani3@vzggx2": "F", "s1@vzggx2": "F", "joad24@vzggx2": "F", "z1@vzgg3": "F", "mhad1@vzgg3": "F", "m2@vzggx2": "F", "krar126@vzggx2": "F", "jbar1@vzgg3": "F", "ali3@vzggx2": "F", "seedh157@vzggx2": "W", "n3@vzggx2": "F", "baker146@vzggx2": "F", "ali3@vzgg3": "F", "m1@vzggx2": "F", "mhd108@vzggx2": "F", "h5@vzgg3": "F", "rd137@vzggx2": "F", "alireaz65@vzggx2": "F", "ad1@vzggx2": "F", "jasm1@vzggx2": "F", "abd1@vzggx2": "F", "ali63@vzggx2": "F", "ali69@vzggx2": "F", "abd144@vzggx2": "F", "hm56@vzggx2": "F", "wsam61@vzggx2": "F", "hsin103@vzggx2": "F", "k11@vzgg3": "F", "mrtza121@vzggx2": "F", "k1@vzgg3": "F", "ali2@vzggx2": "F", "ali67@vzggx2": "F", "hsen23@vzggx2": "F", "h1@vzggx2": "F", "hbwb99@vzggx2": "F", "ali42@vzgg3": "F", "basm@vzggx2": "F", "h159@vzggx2": "F", "hk4@vzggx2": "F", "yaser44@vzggx2": "F", "h5@zgg3": "F", "md1@vzggx2": "F", "mst89@vzggx2": "F", "h147@vzggx2": "F", "basm30@vzggx2": "F", "nzar1@vzggx2": "F", "hmod74@vzggx2": "F", "hsen1@vzggx2": "F", "ali5@vzggx2": "F", "ali1@vzggx2": "F", "sed81@vzggx2": "F", "md2@vzggx2": "F", "yusf34@vzggx2": "F", "azem98@vzggx2": "F", "k1@vzggx2": "F", "m177@vzggx2": "F", "s71@vzggx2": "F", "m3@vzggx2": "F", "ali63@vzgg3": "F", "mslm96@vzggx2": "F", "r3@vzggx2": "F", "m187@vzggx2": "F", "ha30@vzggx2": "F", "h178@vzggx2": "F", "k11@vzggx2": "F", "s2@vzggx2": "F", "abosfa72@vzggx2": "F", "a76@vzgg3": "W", "k27@vzggx2": "W", "kazm160@vzggx2": "W", "kes150@vzggx2": "W", "star45@vzggx2": "W", "smad93@vzggx2": "W", "n81@vzgg3": "W", "ali65@vzggx2": "W", "ali92@vzggx2": "W", "m96@vzggx2": "W", "h47@vzggx2": "W", "alii125@vzggx2": "W", "ktep98@vzggx2": "W", "k51@vzggx2": "W", "a90@vzgg3": "W", "ahmad55@vzggx2": "W", "naman104@vzggx2": "W", "mahmd183@vzggx2": "W", "rad88@vzggx2": "W", "m173@vzggx2": "W", "k33@vzgg3": "W", "k110@vzggx2": "W", "thsin41@vzgg3": "W", "majd141@vzggx2": "W", "adnan93@vzgg3": "W", "m80@vzggx2": "W", "mhamad22@vzgg3": "W", "alinaim32@vzggx2": "W", "hd41@vzggx2": "W", "ss70@vzgg3": "W", "m35@vzgg3": "W", "ali128@vzggx2": "W", "akel179@vzggx2": "W", "mstak86@vzgg3": "W", "amad62@vzggx2": "W", "f61@vzgg3": "W", "am84@vzgg3": "W", "h40@vzgg3": "W", "kalid57@vzggx2": "W", "m23@vzgg3": "W", "hsen166@vzggx2": "W", "teb48@vzggx2": "W", "oleedd75@vzggx2": "W", "ali95@vzgg3": "W", "kazm56@vzgg3": "W", "karar53@vzggx2": "W", "m52@vzggx2": "W", "k42@vzggx2": "W", "k75@vzgg3": "W", "h88@vzgg3": "W", "h31@vzgg3": "W", "ds152@vzggx2": "W", "mhmod55@vzgg3": "W", "abas58@vzggx2": "W", "ahm163@vzggx2": "W", "slam46@vzgg3": "W", "salh80@vzgg3": "W", "m162@vzggx2": "W", "s176@vzggx2": "W", "st64@vzggx2": "W", "sedhmor78@vzggx2": "W", "s150@vzggx2": "W", "krar60@vzgg3": "W", "ns75@vzgg3": "W", "samy34@vzgg3": "W", "a59@vzgg3": "W", "hsen85@vzggx2": "W", "h30@vzgg3": "W", "m39@vzgg3": "W", "ali59@vzggx2": "W", "h28@vzgg3": "W", "he120@vzggx2": "W", "samy77@vzggx2": "W", "star185@vzggx2": "W", "j131@vzggx2": "W", "hseen83@vzggx2": "W", "h82@vzggx2": "W", "hade91@vzgg3": "W", "a66@vzggx2": "W", "h45@vzggx2": "W", "hseen36@vzggx2": "W", "jjasm40@vzggx2": "W", "t21@vzgg3": "W", "heedr62@vzgg3": "W", "moh79@vzggx2": "W", "ali66@vzgg3": "W", "m76@vzggx2": "W", "ali37@vzggx2": "W", "ad38@vzgg3": "W", "m50@vzzgg3": "W", "m77@vzgg3": "W", "ahmad21@vzggx2": "W", "m111@vzgg3": "W", "h170@vzggx2": "W", "adnan43@vzggx2": "W", "m113@vzggx2": "W", "ali46@vzggx2": "W", "d38@vzggx2": "W", "h40@vzggx2": "F", "seed112@vzggx2": "F", "star57@vzgg3": "W"};
+function applyLineTypes(){
+  if(state.lineClassV === 2) return;
+  (state.subscribers||[]).forEach(s=>{
+    const t = LINE_CLASS[String(s.nameEn||s.name||'').toLowerCase()];
+    if(t) s.lineType = t==='F' ? 'EarthLink Fiber' : 'EarthLink Wireless';
+  });
+  state.lineClassV = 2; saveState();
+}
+function isFiber(s){ return /fiber|فايبر|ضوئي/i.test(s.lineType||''); }
+function sectorUrl(ip){
+  ip = String(ip||'').trim();
+  return /^https?:\/\//i.test(ip) ? ip : 'http://' + ip;
+}
+function renderSectors(){
+  const towers = ensureTowers();
+  const box = document.getElementById('sectorsContent');
+  document.getElementById('sec_towers_list').innerHTML = towers.map(t=>`<option value="${escapeHtml(t.name)}">`).join('');
+  if(!towers.length){ box.innerHTML = '<div style="color:#888; text-align:center; padding:10px;">ماكو أبراج بعد — ضيف سكتر من تحت</div>'; return; }
+  box.innerHTML = towers.map(t=>`
+    <details data-tw="1" style="border:1px solid #ddd3f3; border-radius:10px; margin-bottom:10px; overflow:hidden;">
+      <summary style="background:#f1ecfb; padding:8px 12px; font-weight:800; color:#5b3fa8; display:flex; justify-content:space-between; align-items:center; cursor:pointer; list-style:none;">
+        <span>▾ 🗼 ${escapeHtml(t.name)} <span style="font-weight:400; font-size:12px; color:#777;">(${t.sectors.length} سكتر)</span></span>
+        <button type="button" class="sec-del-tower" data-t="${t.id}" style="background:none; border:none; color:#b3413e; font-size:12px; cursor:pointer;">🗑️ حذف البرج</button>
+      </summary>
+      ${t.sectors.map(sc=>`
+        <div style="display:flex; align-items:center; gap:6px; padding:8px 12px; border-top:1px solid #eee;">
+          <div style="flex:1; min-width:0;">
+            <div style="font-weight:700; direction:ltr; text-align:right;">${escapeHtml(sc.name)}</div>
+            <div style="font-size:12.5px; color:#555; direction:ltr; text-align:right;">${escapeHtml(sc.ip)}</div>
+          </div>
+          <a href="${escapeHtml(sectorUrl(sc.ip))}" target="_blank" rel="noopener" style="background:#5b3fa8; color:#fff; text-decoration:none; padding:8px 14px; border-radius:8px; font-weight:700; font-size:13px;">🌐 فتح</a>
+          <button type="button" class="sec-copy" data-ip="${escapeHtml(sc.ip)}" style="background:#eee; border:none; padding:8px 10px; border-radius:8px; cursor:pointer;">📋</button>
+          <button type="button" class="sec-del" data-t="${t.id}" data-s="${sc.id}" style="background:#fdecea; color:#b3413e; border:none; padding:8px 10px; border-radius:8px; cursor:pointer;">🗑️</button>
+        </div>`).join('') || '<div style="padding:8px 12px; color:#888; font-size:12.5px;">ماكو سكاتر</div>'}
+    </details>`).join('');
+  // آيبيات المشتركين: الرقم اللي بالاسم الإنگليزي (s71@vzggx2) = آخر رقم بالآيبي
+  // الفايبر والأرقام المكررة الصغيرة (1-4 = باسورد ضوئي) ما ياخذون آيبي
+  towers.forEach((t, ti)=>{
+    const tag = (t.name.match(/vz\w+/i)||[''])[0].toLowerCase();
+    const base = ((t.sectors[0]||{}).ip||'').split('.').slice(0,3).join('.');
+    if(!tag || !base) return;
+    const list = [], fib = [];
+    (state.subscribers||[]).forEach(s=>{
+      const m = String(s.nameEn||'').match(/^[a-z_.]*?(\d+)@(\w+)/i); if(!m) return;
+      let ap = m[2].toLowerCase(); if(/g+3$/.test(ap)) ap='vzgg3';
+      if(ap !== tag) return;
+      if(['s136@vzggx2','admin@vzggx2'].includes(String(s.nameEn||'').toLowerCase())) return;
+      if(isFiber(s)){ fib.push(s.name); return; }
+      const key = String(s.nameEn||'').toLowerCase();
+      if(IP_SKIP.includes(key)) return;
+      const n = IP_FIX[key] || Number(m[1]); if(n < 5 || n > 254) return;
+      list.push({ n, name:s.name, ip: base+'.'+n });
+    });
+    list.sort((a,b)=>a.n-b.n);
+    const html = `<details style="border:1px solid #cfe6dc; border-radius:10px; margin:-4px 0 10px; overflow:hidden;">
+      <summary style="background:#eaf7f0; padding:8px 12px; font-weight:800; color:#1e7a45; cursor:pointer;">📶 آيبيات المشتركين — ${escapeHtml(t.name)} (${list.length})</summary>
+      ${list.map(x=>`<div style="display:flex; align-items:center; gap:6px; padding:6px 12px; border-top:1px solid #eee;">
+        <div style="flex:1; min-width:0;"><div style="font-weight:700;">${escapeHtml(x.name)}</div>
+        <div style="font-size:12.5px; color:#555; direction:ltr; text-align:right;">${x.ip}</div></div>
+        <a href="http://${x.ip}" target="_blank" rel="noopener" style="background:#1e8a5f; color:#fff; text-decoration:none; padding:7px 12px; border-radius:8px; font-weight:700; font-size:12.5px;">🌐 فتح</a>
+        <button type="button" class="sec-copy" data-ip="${x.ip}" style="background:#eee; border:none; padding:7px 10px; border-radius:8px; cursor:pointer;">📋</button>
+      </div>`).join('') || '<div style="padding:8px 12px; color:#888;">ماكو مشتركين</div>'}
+    </details>
+    <details style="border:1px solid #f0d9a8; border-radius:10px; margin:-4px 0 10px; overflow:hidden;">
+      <summary style="background:#fff8e8; padding:8px 12px; font-weight:800; color:#8a5a00; cursor:pointer;">🔆 مشتركين ضوئي — ${escapeHtml(t.name)} (${fib.length})</summary>
+      ${fib.sort((a,b)=>a.localeCompare(b,'ar')).map(n=>`<div style="padding:6px 12px; border-top:1px solid #eee; font-weight:700;">${escapeHtml(n)} <span style="font-size:11.5px; color:#8a5a00;">— ضوئي</span></div>`).join('') || '<div style="padding:8px 12px; color:#888;">ماكو</div>'}
+    </details>`;
+    const blocks = box.children; if(blocks[ti*2] || blocks[ti]) (box.querySelectorAll(':scope > [data-tw]')[ti]).insertAdjacentHTML('afterend', html);
+  });
+  box.querySelectorAll('.sec-copy').forEach(b=>b.addEventListener('click', async ()=>{
+    try{ await navigator.clipboard.writeText(b.dataset.ip); showSavedToast('✅ انتسخ الآيبي'); }catch(e){ prompt('انسخ الآيبي:', b.dataset.ip); }
+  }));
+  box.querySelectorAll('.sec-del').forEach(b=>b.addEventListener('click', ()=>{
+    const t = state.towers.find(x=>x.id===b.dataset.t); if(!t) return;
+    const sc = t.sectors.find(x=>x.id===b.dataset.s); if(!sc) return;
+    if(!confirm('تحذف السكتر ' + sc.name + '؟')) return;
+    t.sectors = t.sectors.filter(x=>x.id!==sc.id); saveState(); renderSectors();
+  }));
+  box.querySelectorAll('.sec-del-tower').forEach(b=>b.addEventListener('click', (ev)=>{ ev.preventDefault(); ev.stopPropagation();
+    const t = state.towers.find(x=>x.id===b.dataset.t); if(!t) return;
+    if(!confirm('تحذف ' + t.name + ' وكل السكاتر اللي بي؟')) return;
+    state.towers = state.towers.filter(x=>x.id!==t.id); saveState(); renderSectors();
+  }));
+}
+document.getElementById('btnSectors').addEventListener('click', ()=>{
+  renderSectors();
+  document.getElementById('sectorsModal').style.display = 'block';
+});
+document.getElementById('btnSectorsClose').addEventListener('click', ()=>{
+  document.getElementById('sectorsModal').style.display = 'none';
+});
+document.getElementById('btnSectorAdd').addEventListener('click', ()=>{
+  const tName = document.getElementById('sec_tower').value.trim() || 'البرج الأول';
+  const name = document.getElementById('sec_name').value.trim();
+  const ip = document.getElementById('sec_ip').value.trim();
+  if(!name || !ip){ alert('اكتب اسم السكتر والآيبي'); return; }
+  const towers = ensureTowers();
+  let t = towers.find(x=>x.name.trim()===tName);
+  if(!t){ t = { id:'t'+Date.now(), name:tName, sectors:[] }; towers.push(t); }
+  t.sectors.push({ id:'s'+Date.now(), name, ip });
+  saveState();
+  document.getElementById('sec_name').value=''; document.getElementById('sec_ip').value='';
+  renderSectors(); showSavedToast('✅ انحفظ السكتر');
+});
 document.getElementById('btnProfitsClose').addEventListener('click', ()=>{
   document.getElementById('profitsModal').style.display = 'none';
   addModalSearch((document.querySelector('#renewedMsgsModal div[style*="border:1px solid var(--line)"]') || document.getElementById('btnRenewedMsgsClose')));
