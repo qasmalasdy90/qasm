@@ -1046,6 +1046,8 @@ function fmtHoursLeft(sub){
 // تُستخدم بزر "دين لم يسدد" وبقائمة التذكيرات وبتقرير الأرباح والديون، حتى
 // يكون الرقم نفسه بكل مكان.
 function remainingDebtOf(sub){
+  // مجموع الباقي اللي يكتبه قاسم بيده + الاشتراك إذا ما واصل
+  if(sub.manualDebt!==undefined && sub.manualDebt!==null && sub.manualDebt!=='') return Number(sub.manualDebt)||0;
   // المشترك اللي اندمج من لوحة EarthLink: الدين حسب اللوحة بس
   if(sub.elSynced) return earthlinkDebtOf(sub);
   const own = Math.max(0,(Number(sub.price)||0) - (Number(sub.paid)||0)) + extractDebtFromNotes(sub.notes);
@@ -1820,6 +1822,7 @@ function cardTemplate(sub, kind){
           تاريخ الاشتراك: <b>${fmtDateTime(sub.subscriptionDate, sub.expiryTime||sub.subscriptionTime)}</b><br>
           تاريخ انتهاء الاشتراك: <b>${fmtDateTime(sub.expiryDate, sub.expiryTime)}</b><br>
           يوجد بذمتكم دين لم يسدد بمبلغ: <b>${fmtMoney(remaining)} د.ع</b>
+          ${sub.notes ? `<br>📝 التفاصيل: ${escapeHtml(sub.notes)}` : ''}
         </div>
         <div class="rc-note">يرجى التكرم بتسديد الدين في أقرب وقت ممكن. مع الشكر لتعاونكم.</div>
         <div class="rc-footer">مكتب ${escapeHtml(shop)} 🌐</div>
@@ -1995,7 +1998,7 @@ function receiptTemplate(sub){
       <div class="r-row"><span class="k">سعر الاشتراك</span><span class="v">${sub.price||0} د.ع</span></div>
       <div class="r-row"><span class="k">💰 المبلغ الواصل</span><span class="v">${sub.paid||0} د.ع</span></div>
       ${sub.notes ? `<div class="r-row r-notes-row"><span class="k">📝 ملاحظات</span><span class="v">${escapeHtml(sub.notes)}</span></div>` : ''}
-      ${remaining > 0 ? `<div class="r-row"><span class="k">الباقي</span><span class="v">${remaining} د.ع</span></div>` : ''}
+      ${remaining > 0 ? `<div class="r-row"><span class="k">🔴 مجموع الباقي عليك</span><span class="v">${remaining} د.ع</span></div>` : ''}
       <div class="status-line ${st.cls}">${st.text}</div>
       ${remainingDebtOf(sub) > 0 ? `<div class="status-line bad" style="margin-top:6px;">🔴 دين لم يسدد: ${fmtMoney(remainingDebtOf(sub))} د.ع</div>` : ''}
       <div class="r-notes">
@@ -2072,6 +2075,7 @@ function formTemplate(sub){
         <div class="field"><label>المبلغ الواصل (د.ع)</label><input type="number" id="f_paid" value="${s.paid||0}"></div>
       </div>
       <div class="field"><label>📝 ملاحظات (مثلاً: دين، طلب ثاني عليه...)</label><textarea id="f_notes" rows="2">${escapeHtml(s.notes||'')}</textarea></div>
+      <div class="field"><label>🔴 مجموع الباقي (المجموع الكامل ويا الاشتراك — تكتبه بيدك ويطلع بالوصل مثل ما هو)</label><input type="number" id="f_manualDebt" placeholder="فارغ = يحسبه البرنامج" value="${s.manualDebt===undefined||s.manualDebt===null||s.manualDebt===''?'':s.manualDebt}"></div>
       <div class="field" style="border-top:1px dashed var(--line); padding-top:14px;">
         <label style="font-size:14px; color:var(--teal-dark);">📷 صورة/صور شاشة التفعيل — تُقرأ منها المعلومات وتُعبّأ الحقول أعلاه تلقائياً (يمكن اختيار أكثر من صورة معاً من المعرض)</label>
         <div style="display:flex; gap:8px; margin-top:8px;">
@@ -2234,6 +2238,7 @@ function bindForm(sub){
       price: Number(document.getElementById('f_price').value)||0,
       paid: Number(document.getElementById('f_paid').value)||0,
       notes: document.getElementById('f_notes').value.trim(),
+      manualDebt: (v=>v===''?'':Math.max(0,Number(v)||0))(document.getElementById('f_manualDebt').value.trim()),
       photos: formPhotos,
       photo: lastPhoto ? lastPhoto.src : null,
       photoDate: lastPhoto ? lastPhoto.date : null,
