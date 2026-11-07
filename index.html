@@ -1997,7 +1997,7 @@ function receiptTemplate(sub){
       <div class="r-row"><span class="k">تاريخ الانتهاء</span><span class="v">${fmtDateTime(sub.expiryDate, sub.expiryTime)}</span></div>
       <div class="r-row"><span class="k">سعر الاشتراك</span><span class="v">${sub.price||0} د.ع</span></div>
       <div class="r-row"><span class="k">💰 المبلغ الواصل</span><span class="v">${sub.paid||0} د.ع</span></div>
-      ${sub.notes ? `<div class="r-row r-notes-row"><span class="k">📝 ملاحظات</span><span class="v">${escapeHtml(sub.notes)}</span></div>` : ''}
+      ${sub.notes ? `<div class="r-row r-notes-row" style="display:block;"><div class="k" style="margin-bottom:4px;">📝 ملاحظات</div><div class="v" style="text-align:right; line-height:1.8; white-space:pre-wrap; word-break:break-word;">${escapeHtml(sub.notes)}</div></div>` : ''}
       ${remaining > 0 ? `<div class="r-row"><span class="k">🔴 مجموع الباقي عليك</span><span class="v">${remaining} د.ع</span></div>` : ''}
       <div class="status-line ${st.cls}">${st.text}</div>
       ${remainingDebtOf(sub) > 0 ? `<div class="status-line bad" style="margin-top:6px;">🔴 دين لم يسدد: ${fmtMoney(remainingDebtOf(sub))} د.ع</div>` : ''}
