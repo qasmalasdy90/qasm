@@ -626,10 +626,16 @@ async function cloudLogout(){
     <div class="brand">
       <div class="brand-top">
         <div class="shop">قاسم الاسدي للانترنت</div>
-        <div class="sub-count-badge" id="subCountBadge" title="عدد المشتركين">0</div>
+        <div style="display:flex; align-items:center; gap:6px; flex-shrink:0;">
+          <div class="sub-count-badge" id="subCountBadge" title="عدد المشتركين">0</div>
+          <button class="add-btn" id="btnLogout" style="background:#888; font-size:12px; padding:6px 10px; width:auto; margin:0;">🚪 خروج</button>
+        </div>
       </div>
       <div class="owner">07705663837</div>
-      <div class="logo"><span>EARTH</span><span>LINK</span></div>
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
+        <div class="logo"><span>EARTH</span><span>LINK</span></div>
+        <div id="cloudStatus" style="font-size:12px; color:#7a7267; text-align:left; white-space:nowrap;">☁️ ...</div>
+      </div>
     </div>
     <button class="add-btn" id="btnNew">+ مشترك جديد</button>
     <button class="add-btn" id="btnSaveAll" style="background:var(--gold);">💾 حفظ جميع المشتركين</button>
@@ -642,10 +648,6 @@ async function cloudLogout(){
     <button class="add-btn" id="btnRenewedMsgs" style="background:#25a35a; font-size:13px; padding:10px 6px;">📲 رسائل المجددين <span id="renewedMsgsCount" style="background:#fff; color:#1e7a45; border-radius:999px; padding:0 8px; margin-inline-start:4px; font-weight:800;">0</span></button>
     <button class="add-btn" id="btnProfits" style="background:#1e8a5f; font-size:13px; padding:10px 6px;">💰 الأرباح والديون</button>
     <button class="add-btn" id="btnSectors" style="background:#5b3fa8; font-size:13px; padding:10px 6px;">📡 السكاتر والأبراج</button>
-    <div style="display:flex; align-items:center; gap:6px;">
-      <div id="cloudStatus" style="flex:1; font-size:12px; color:#7a7267; text-align:center; padding:2px 0;">☁️ ...</div>
-      <button class="add-btn" id="btnLogout" style="background:#888; font-size:12px; padding:6px 10px; width:auto;">🚪 خروج</button>
-    </div>
     <div style="display:flex; gap:6px;">
       <button class="add-btn" id="btnEarthlinkOpen" style="flex:1; background:var(--el-blue,#1a56c4); font-size:12.5px; padding:9px 6px;">🌐 فتح صفحة EarthLink</button>
       <button class="add-btn" id="btnEarthlinkResellerApp" style="flex:1; background:var(--el-blue,#1a56c4); font-size:12.5px; padding:9px 6px;">📲 فتح تطبيق وكيل ايرثلنك</button>
@@ -869,7 +871,7 @@ const lineTypes = ['EarthLink Wireless','EarthLink Fiber'];
 const subTypes = ['Economy','Plus','More','Turbo','Standard','Business Pro'];
 const subTypePrices = { 'Economy':35, 'Plus':40, 'Standard':45, 'Turbo':60, 'Business Pro':120 };
 // سعر الجملة (اللي يوصلك إنت) لكل خط — يستخدم لحساب الربح بفقرة "الأرباح والديون"
-const subTypeWholesale = { 'Economy':19, 'Plus':20, 'Standard':29, 'Turbo':42 };
+const subTypeWholesale = { 'Economy':18.5, 'Plus':20.5, 'Standard':29, 'Turbo':42 };
 
 function uid(){ return 'S' + Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
 // ---------- pull a phone number from the device's contacts (used when the subscriber page has none) ----------
@@ -1531,6 +1533,8 @@ function showSavedToast(msg, durationMs){
 function render(){
   fixPrices();
   applyLineTypes();
+  oneTimeFixes();
+  renumberReceipts();
   hydratePhotos();
   updateRenewedMsgsCount();
   renderList();
@@ -1984,7 +1988,7 @@ function receiptTemplate(sub){
     </div>
     <div class="r-logo">
       <div class="word"><span>EARTH</span><span>LINK</span></div>
-      <div class="no">وصل رقم: ${sub.receiptNo || '—'}</div>
+      <div class="no" dir="rtl">رقم الوصل: <span dir="ltr" style="unicode-bidi:isolate;">${sub.receiptNo || '—'}</span></div>
     </div>
     <div class="r-body">
       <div class="r-row"><span class="k">اسم المشترك بالعربي</span><span class="v">${escapeHtml(sub.name)}</span></div>
@@ -2249,7 +2253,7 @@ function bindForm(sub){
     } else {
       const newSub = {
         id: uid(),
-        receiptNo: state.nextReceiptNo++,
+        receiptNo: state.nextReceiptNo++, addedAt: Date.now(),
         history: [{
           label:'اشتراك جديد',
           date: todayISO(),
@@ -2908,8 +2912,12 @@ function findOldUnrenewedSubs(){
   return state.subscribers.filter(sub => hoursLeft(sub) < -720);
 }
 async function deleteOldUnrenewedSubs(){
-  const old = findOldUnrenewedSubs();
+  // المشترك اللي عليه دين ما ينحذف أبداً حتى لو منتهي من زمان — دينه يبقى
+  const allOld = findOldUnrenewedSubs();
+  const old = allOld.filter(s=> !(remainingDebtOf(s) > 0));
+  const keptDebt = allOld.length - old.length;
   if(old.length === 0){
+    if(keptDebt){ showSavedToast(`✅ ما انحذف أحد — ${keptDebt} منتهي بس عليهم دين فبقوا`); return; }
     showSavedToast('✅ ما فيه مشتركين منتهين أكثر من شهر بدون تجديد');
     return;
   }
@@ -2924,7 +2932,7 @@ async function deleteOldUnrenewedSubs(){
   if(activeId && oldIds.has(activeId)) activeId = null;
   await saveState();
   render();
-  showSavedToast(`🗑️ تم حذف ${old.length} مشترك قديم غير مجدد`);
+  showSavedToast(`🗑️ تم حذف ${old.length} مشترك قديم غير مجدد` + (keptDebt ? ` — وبقى ${keptDebt} عليهم دين` : ''));
 }
 document.getElementById('btnDeleteOld').addEventListener('click', deleteOldUnrenewedSubs);
 
@@ -3214,7 +3222,7 @@ function mergeEarthlinkRows(rows){
       updated++;
     } else {
       state.subscribers.push({
-        id: uid(), receiptNo: state.nextReceiptNo++,
+        id: uid(), receiptNo: state.nextReceiptNo++, addedAt: Date.now(),
         history: [{
           label:'مستورد من لوحة EarthLink', date: today,
           fromExpiry:'', fromTime:'',
@@ -3334,6 +3342,25 @@ function ensureTowers(){
 const IP_SKIP = ['ha30@vzggx2','basm30@vzggx2','h40@vzggx2','h45@vzggx2','alireaz65@vzggx2','mslm96@vzggx2','azem98@vzggx2','kes150@vzggx2','h5@zgg3','h5@vzgg3','md77@vzgg3','a76@vzgg3'];
 // رقم آيبي يختلف عن الرقم اللي بالاسم
 const IP_FIX = { 'k75@vzgg3': 76 };
+// ---------- ترقيم الوصولات حسب الأقدمية (ترتيب قاسم) ----------
+// 0 = كلش قديم، 1 = قديم، 2 = نص قديم، 3 = جديد. اللي ماله رقم (المشترك الجديد) يجي بالآخر
+const AGE_RANK = {"hsen23@vzggx2": 0, "wsam61@vzggx2": 0, "karar186@vzggx2": 1, "ali63@vzggx2": 1, "abd144@vzggx2": 1, "karar53@vzggx2": 1, "ali69@vzggx2": 1, "hm56@vzggx2": 1, "k42@vzggx2": 1, "salh80@vzgg3": 1, "ali37@vzggx2": 1, "ahm163@vzggx2": 1, "ds152@vzggx2": 1, "abas58@vzggx2": 1, "mrtza121@vzggx2": 1, "hsin103@vzggx2": 1, "mhmod55@vzgg3": 1, "m162@vzggx2": 1, "sedhmor78@vzggx2": 1, "hsen85@vzggx2": 1, "st64@vzggx2": 1, "h82@vzggx2": 1, "hseen36@vzggx2": 1, "samy77@vzggx2": 1, "m39@vzgg3": 1, "krar60@vzgg3": 1, "a59@vzgg3": 1, "t21@vzgg3": 1, "thsin41@vzgg3": 1, "ali66@vzgg3": 1, "hbwb99@vzggx2": 1, "ali42@vzgg3": 1, "star185@vzggx2": 1, "h159@vzggx2": 1, "yaser44@vzggx2": 1, "j131@vzggx2": 1, "h147@vzggx2": 1, "hade91@vzgg3": 1, "hseen83@vzggx2": 1, "mst89@vzggx2": 1, "a66@vzggx2": 1, "jjasm40@vzggx2": 1, "hsen1@vzggx2": 1, "moh79@vzggx2": 1, "m111@vzgg3": 1, "yusf34@vzggx2": 1, "sed81@vzggx2": 1, "m76@vzggx2": 1, "m50@vzzgg3": 1, "ahmad21@vzggx2": 1, "ad38@vzgg3": 1, "m77@vzgg3": 1, "s176@vzggx2": 1, "h170@vzggx2": 1, "s71@vzggx2": 1, "m113@vzggx2": 1, "ali63@vzgg3": 1, "m177@vzggx2": 1, "a12@vzggx2": 1, "m107@vzggx2": 1, "k2@vzgg3": 1, "k27@vzggx2": 1, "hani3@vzggx2": 1, "s1@vzggx2": 1, "joad24@vzggx2": 1, "kazm160@vzggx2": 1, "kes150@vzggx2": 1, "star57@vzgg3": 1, "z1@vzgg3": 1, "mhad1@vzgg3": 1, "smad93@vzggx2": 1, "n81@vzgg3": 1, "abosfa72@vzggx2": 1, "ali65@vzggx2": 1, "ali92@vzggx2": 1, "h47@vzggx2": 1, "alii125@vzggx2": 1, "krar126@vzggx2": 1, "jbar1@vzgg3": 1, "ktep98@vzggx2": 1, "k51@vzggx2": 1, "h178@vzggx2": 1, "a90@vzgg3": 1, "ahmad55@vzggx2": 1, "naman104@vzggx2": 1, "a124@vzggx2": 1, "mahmd183@vzggx2": 1, "rad88@vzggx2": 1, "m173@vzggx2": 1, "k33@vzgg3": 1, "flah4@vzggx2": 1, "k110@vzggx2": 1, "majd141@vzggx2": 1, "adnan93@vzgg3": 1, "m80@vzggx2": 1, "n3@vzggx2": 1, "seed112@vzggx2": 1, "mhamad22@vzgg3": 1, "alinaim32@vzggx2": 1, "h40@vzggx2": 1, "ha30@vzggx2": 3, "baker146@vzggx2": 1, "m35@vzgg3": 1, "d38@vzggx2": 1, "ali128@vzggx2": 1, "mhd108@vzggx2": 1, "akel179@vzggx2": 1, "mstak86@vzgg3": 1, "h5@vzgg3": 1, "amad62@vzggx2": 1, "rd137@vzggx2": 1, "kalid57@vzggx2": 1, "seedh157@vzggx2": 1, "alireaz65@vzggx2": 1, "hsen166@vzggx2": 1, "teb48@vzggx2": 1, "jasm1@vzggx2": 1, "oleedd75@vzggx2": 1, "abd1@vzggx2": 1, "ali95@vzgg3": 1, "s150@vzggx2": 1, "h28@vzgg3": 1, "basm30@vzggx2": 1, "k1@vzggx2": 1, "adnan43@vzggx2": 1, "mslm96@vzggx2": 1, "m187@vzggx2": 1, "a76@vzgg3": 2, "kazm56@vzgg3": 2, "ali46@vzggx2": 2, "k1@vzgg3": 2, "m52@vzggx2": 2, "k75@vzgg3": 2, "h88@vzgg3": 2, "h31@vzgg3": 2, "slam46@vzgg3": 2, "ali67@vzggx2": 2, "ns75@vzgg3": 2, "samy34@vzgg3": 2, "hmod74@vzggx2": 2, "h1@vzggx2": 2, "ali59@vzggx2": 2, "nzar1@vzggx2": 2, "ali5@vzggx2": 2, "md2@vzggx2": 2, "azem98@vzggx2": 2, "am84@vzgg3": 2, "h40@vzgg3": 2, "m23@vzgg3": 2, "ad1@vzggx2": 2, "k11@vzgg3": 3, "h50@vzggx2": 3, "h30@vzgg3": 3, "ali2@vzggx2": 3, "he120@vzggx2": 3, "basm@vzggx2": 3, "md1@vzggx2": 3, "hk4@vzggx2": 3, "star45@vzggx2": 3, "h5@zgg3": 3, "h45@vzggx2": 3, "ali1@vzggx2": 3, "heedr62@vzgg3": 3, "h29@vzgg3": 3, "sd5@vzggx2": 3, "m3@vzggx2": 3, "b4@vzggx2": 3, "m96@vzggx2": 3, "m2@vzggx2": 3, "ali3@vzggx2": 3, "sh4@vzggx2": 3, "hd41@vzggx2": 3, "ss70@vzgg3": 3, "ali3@vzgg3": 3, "m1@vzggx2": 3, "f61@vzgg3": 3, "r3@vzggx2": 3, "k11@vzggx2": 3, "s2@vzggx2": 3, "s54@vzggx2": 1, "m30@vzggx2": 3, "mhnd68@vzggx2": 1};
+const TEST_ACCOUNTS = ['s136@vzggx2','admin@vzggx2'];
+function renumberReceipts(){
+  const before = (state.subscribers||[]).length;
+  state.subscribers = (state.subscribers||[]).filter(s=>{
+    const k = String(s.nameEn||'').toLowerCase();
+    return !TEST_ACCOUNTS.includes(k) && !/^balance\s*:/i.test(String(s.name||''));
+  });
+  const rank = s => { const r = AGE_RANK[String(s.nameEn||'').toLowerCase()]; return r===undefined ? 4 : r; };
+  const act = s => String(s.subscriptionDate||'') + 'T' + String(s.subscriptionTime||'00:00');
+  const sorted = state.subscribers.slice().sort((a,b)=>
+    rank(a)-rank(b) || (rank(a)===4 ? (Number(a.addedAt)||0)-(Number(b.addedAt)||0) : 0) || act(a).localeCompare(act(b)) || String(a.nameEn||a.name).localeCompare(String(b.nameEn||b.name)));
+  let changed = before !== state.subscribers.length;
+  sorted.forEach((s,i)=>{ if(s.receiptNo !== i+1){ s.receiptNo = i+1; changed = true; } });
+  if(state.nextReceiptNo !== sorted.length+1){ state.nextReceiptNo = sorted.length+1; changed = true; }
+  if(changed) saveState();
+}
 // ---------- تصنيف قاسم: ضوئي / وايرلس (يتطبق مرة وحدة) ----------
 const LINE_CLASS = {"s54@vzggx2": "W", "md77@vzgg3": "W", "h29@vzgg3": "W", "a124@vzggx2": "W", "flah4@vzggx2": "F", "karar186@vzggx2": "F", "a12@vzggx2": "F", "m107@vzggx2": "F", "k2@vzgg3": "F", "hani3@vzggx2": "F", "s1@vzggx2": "F", "joad24@vzggx2": "F", "z1@vzgg3": "F", "mhad1@vzgg3": "F", "m2@vzggx2": "F", "krar126@vzggx2": "F", "jbar1@vzgg3": "F", "ali3@vzggx2": "F", "seedh157@vzggx2": "W", "n3@vzggx2": "F", "baker146@vzggx2": "F", "ali3@vzgg3": "F", "m1@vzggx2": "F", "mhd108@vzggx2": "F", "h5@vzgg3": "F", "rd137@vzggx2": "F", "alireaz65@vzggx2": "F", "ad1@vzggx2": "F", "jasm1@vzggx2": "F", "abd1@vzggx2": "F", "ali63@vzggx2": "F", "ali69@vzggx2": "F", "abd144@vzggx2": "F", "hm56@vzggx2": "F", "wsam61@vzggx2": "F", "hsin103@vzggx2": "F", "k11@vzgg3": "F", "mrtza121@vzggx2": "F", "k1@vzgg3": "F", "ali2@vzggx2": "F", "ali67@vzggx2": "F", "hsen23@vzggx2": "F", "h1@vzggx2": "F", "hbwb99@vzggx2": "F", "ali42@vzgg3": "F", "basm@vzggx2": "F", "h159@vzggx2": "F", "hk4@vzggx2": "F", "yaser44@vzggx2": "F", "h5@zgg3": "F", "md1@vzggx2": "F", "mst89@vzggx2": "F", "h147@vzggx2": "F", "basm30@vzggx2": "F", "nzar1@vzggx2": "F", "hmod74@vzggx2": "F", "hsen1@vzggx2": "F", "ali5@vzggx2": "F", "ali1@vzggx2": "F", "sed81@vzggx2": "F", "md2@vzggx2": "F", "yusf34@vzggx2": "F", "azem98@vzggx2": "F", "k1@vzggx2": "F", "m177@vzggx2": "F", "s71@vzggx2": "F", "m3@vzggx2": "F", "ali63@vzgg3": "F", "mslm96@vzggx2": "F", "r3@vzggx2": "F", "m187@vzggx2": "F", "ha30@vzggx2": "F", "h178@vzggx2": "F", "k11@vzggx2": "F", "s2@vzggx2": "F", "abosfa72@vzggx2": "F", "a76@vzgg3": "W", "k27@vzggx2": "W", "kazm160@vzggx2": "W", "kes150@vzggx2": "W", "star45@vzggx2": "W", "smad93@vzggx2": "W", "n81@vzgg3": "W", "ali65@vzggx2": "W", "ali92@vzggx2": "W", "m96@vzggx2": "W", "h47@vzggx2": "W", "alii125@vzggx2": "W", "ktep98@vzggx2": "W", "k51@vzggx2": "W", "a90@vzgg3": "W", "ahmad55@vzggx2": "W", "naman104@vzggx2": "W", "mahmd183@vzggx2": "W", "rad88@vzggx2": "W", "m173@vzggx2": "W", "k33@vzgg3": "W", "k110@vzggx2": "W", "thsin41@vzgg3": "W", "majd141@vzggx2": "W", "adnan93@vzgg3": "W", "m80@vzggx2": "W", "mhamad22@vzgg3": "W", "alinaim32@vzggx2": "W", "hd41@vzggx2": "W", "ss70@vzgg3": "W", "m35@vzgg3": "W", "ali128@vzggx2": "W", "akel179@vzggx2": "W", "mstak86@vzgg3": "W", "amad62@vzggx2": "W", "f61@vzgg3": "W", "am84@vzgg3": "W", "h40@vzgg3": "W", "kalid57@vzggx2": "W", "m23@vzgg3": "W", "hsen166@vzggx2": "W", "teb48@vzggx2": "W", "oleedd75@vzggx2": "W", "ali95@vzgg3": "W", "kazm56@vzgg3": "W", "karar53@vzggx2": "W", "m52@vzggx2": "W", "k42@vzggx2": "W", "k75@vzgg3": "W", "h88@vzgg3": "W", "h31@vzgg3": "W", "ds152@vzggx2": "W", "mhmod55@vzgg3": "W", "abas58@vzggx2": "W", "ahm163@vzggx2": "W", "slam46@vzgg3": "W", "salh80@vzgg3": "W", "m162@vzggx2": "W", "s176@vzggx2": "W", "st64@vzggx2": "W", "sedhmor78@vzggx2": "W", "s150@vzggx2": "W", "krar60@vzgg3": "W", "ns75@vzgg3": "W", "samy34@vzgg3": "W", "a59@vzgg3": "W", "hsen85@vzggx2": "W", "h30@vzgg3": "W", "m39@vzgg3": "W", "ali59@vzggx2": "W", "h28@vzgg3": "W", "he120@vzggx2": "W", "samy77@vzggx2": "W", "star185@vzggx2": "W", "j131@vzggx2": "W", "hseen83@vzggx2": "W", "h82@vzggx2": "W", "hade91@vzgg3": "W", "a66@vzggx2": "W", "h45@vzggx2": "W", "hseen36@vzggx2": "W", "jjasm40@vzggx2": "W", "t21@vzgg3": "W", "heedr62@vzgg3": "W", "moh79@vzggx2": "W", "ali66@vzgg3": "W", "m76@vzggx2": "W", "ali37@vzggx2": "W", "ad38@vzgg3": "W", "m50@vzzgg3": "W", "m77@vzgg3": "W", "ahmad21@vzggx2": "W", "m111@vzgg3": "W", "h170@vzggx2": "W", "adnan43@vzggx2": "W", "m113@vzggx2": "W", "ali46@vzggx2": "W", "d38@vzggx2": "W", "h40@vzggx2": "F", "seed112@vzggx2": "F", "star57@vzgg3": "W"};
 function applyLineTypes(){
@@ -3472,46 +3499,60 @@ function profitOfSub(s){
   if(subTypeWholesale[t] !== undefined) return (Number(s.price)||0) - subTypeWholesale[t];
   return Number(s.price)||0;
 }
+function oneTimeFixes(){
+  if(state.fixV >= 1) return;
+  const ab = (state.subscribers||[]).find(s=>String(s.nameEn||'').toLowerCase()==='abd144@vzggx2');
+  if(ab) ab.manualDebt = 40;   // عبد الله المالكي: عليه 40 بس (قاسم)
+  state.fixV = 1; saveState();
+}
+// حركة الاشتراكات: مشترك جديد (اسمه ما كان عندك) مقابل مشترك ما جدد (انتهى ولا تجدد)
+// التجديد أو لصق صفحة إيرثلنك لمشترك قديم ما ينحسب جديد
 function buildMonthlyTrendHtml(){
   const subs = state.subscribers || [];
-  const byMonth = {};
-  subs.forEach(s=>{
-    const key = (s.subscriptionDate||'').slice(0,7);
-    if(!/^\d{4}-\d{2}$/.test(key)) return;
-    if(!byMonth[key]) byMonth[key] = { count:0, profit:0 };
-    byMonth[key].count++;
-    byMonth[key].profit += profitOfSub(s);
-  });
-  const keys = Object.keys(byMonth).sort();
-  if(keys.length < 2) return '';
-  const lastKeys = keys.slice(-6); // آخر ٦ أشهر تكفي بشاشة الجوال
-  let rows = '';
-  lastKeys.forEach((key,i)=>{
-    const cur = byMonth[key];
-    const prevKey = keys[keys.indexOf(key)-1];
-    const prev = prevKey ? byMonth[prevKey] : null;
-    const arrow = (curVal, prevVal) => {
-      if(prevVal===undefined || prevVal===null) return '<span style="color:#999;">—</span>';
-      if(curVal > prevVal) return '<span style="color:#1e8a5f;">📈</span>';
-      if(curVal < prevVal) return '<span style="color:#b3413e;">📉</span>';
-      return '<span style="color:#999;">➡️</span>';
-    };
-    rows += `<tr>
-      <td style="padding:5px 4px; border-bottom:1px solid #eee;">${monthLabel(key)}</td>
-      <td style="padding:5px 4px; border-bottom:1px solid #eee; text-align:center;">${cur.count} ${arrow(cur.count, prev?prev.count:null)}</td>
-      <td style="padding:5px 4px; border-bottom:1px solid #eee; text-align:center;">${fmtMoney(cur.profit)} ${arrow(cur.profit, prev?prev.profit:null)}</td>
-    </tr>`;
-  });
+  const today = todayISO();
+  const dAdd = n => addDays(today, n);
+  const dayOf = ms => localISO(new Date(Number(ms)));
+  const newDays = subs.filter(s=> Number(s.addedAt)>0).map(s=> ({ d: dayOf(s.addedAt), p: profitOfSub(s) }));
+  const lapsed = subs.filter(s=> s.expiryDate && statusOf(s).cls==='bad').map(s=> ({ d: String(s.expiryDate).slice(0,10), p: profitOfSub(s) }));
+  const sum = (arr, from, to) => { let c=0, p=0; arr.forEach(e=>{ if(e.d>=from && e.d<=to){ c++; p+=e.p; } }); return {c,p}; };
+  const m0 = today.slice(0,7)+'-01';
+  const lmEnd = addDays(m0,-1), lmStart = lmEnd.slice(0,7)+'-01';
+  const dom = Number(today.slice(8,10));
+  const lmSame = (()=>{ const d = addDays(lmStart, dom-1); return d > lmEnd ? lmEnd : d; })();
+  const periods = [
+    ['اليوم', [today,today], [dAdd(-1),dAdd(-1)], 'أمس'],
+    ['آخر ١٥ يوم', [dAdd(-14),today], [dAdd(-29),dAdd(-15)], 'الـ١٥ يوم اللي قبلها'],
+    ['هذا الشهر', [m0,today], [lmStart,lmSame], 'نفس الفترة من الشهر الماضي'],
+  ];
+  // goodWhenUp: للجدد الصعود زين، للي ما جددوا الصعود سيء
+  const arrow = (cur, prev, goodWhenUp) => {
+    const d = cur - prev;
+    if(d === 0) return `<span style="color:#999;">➡️ نفس الشي</span>`;
+    const good = (d > 0) === goodWhenUp;
+    const col = good ? '#1e8a5f' : '#b3413e';
+    // الزين = صعود أخضر، والسيء = نزول أحمر (للي ما جددوا: زيادتهم نزول أحمر، ونقصانهم صعود أخضر)
+    return `<span style="color:${col}; font-weight:700;">${good?'⬆️ صعود':'⬇️ نزول'} ${Math.abs(d)}</span>`;
+  };
+  const block = (title, cur, prev, plbl, goodWhenUp, color) => `
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:6px;">
+      <span style="font-weight:700; color:${color};">${title}</span>${arrow(cur.c, prev.c, goodWhenUp)}
+    </div>
+    <div style="font-size:12.5px; color:#333;">${cur.c} مشترك — ربح صافي ${fmtMoney(cur.p)} د.ع</div>
+    <div style="font-size:11.5px; color:#888;">${plbl}: ${prev.c} مشترك — ${fmtMoney(prev.p)} د.ع</div>`;
   return `
-    <h4 style="margin:16px 0 6px; color:#333;">📈 اتجاه الأشهر (الاشتراكات والأرباح)</h4>
-    <table style="width:100%; border-collapse:collapse; font-size:12.5px;">
-      <thead><tr style="background:#f2f2f2;">
-        <th style="padding:5px 4px; text-align:right;">الشهر</th>
-        <th style="padding:5px 4px;">عدد الاشتراكات</th>
-        <th style="padding:5px 4px;">الأرباح</th>
-      </tr></thead>
-      <tbody>${rows}</tbody>
-    </table>
+    <h4 style="margin:16px 0 6px; color:#333;">📈 حركة المشتركين (جدد / ما جددوا)</h4>
+    ${periods.map(([lbl,cr,pr,plbl])=>{
+      const n1=sum(newDays,cr[0],cr[1]), n0=sum(newDays,pr[0],pr[1]);
+      const l1=sum(lapsed,cr[0],cr[1]), l0=sum(lapsed,pr[0],pr[1]);
+      const net = n1.c - l1.c;
+      return `<div style="border:1px solid #eee; border-radius:8px; padding:8px 10px; margin-bottom:8px;">
+        <div style="font-weight:800; color:#333;">${lbl}</div>
+        ${block('🟢 مشتركين جدد', n1, n0, plbl, true, '#1e8a5f')}
+        ${block('🔴 ما جددوا', l1, l0, plbl, false, '#b3413e')}
+        <div style="margin-top:6px; padding-top:5px; border-top:1px dashed #ddd; font-size:12.5px;">الصافي: <b style="color:${net>=0?'#1e8a5f':'#b3413e'};">${net>0?'+':''}${net}</b> مشترك</div>
+      </div>`;
+    }).join('')}
+    <div style="font-size:11px; color:#999;">ملاحظة: "الجدد" يبدون ينحسبون من هسه وجاي، والقدماء ما ينحسبون جدد حتى لو جددوا أو انلصقوا.</div>
   `;
 }
 
@@ -3586,7 +3627,7 @@ function renderProfitsReport(){
         <th style="padding:5px 4px;">العدد</th>
         <th style="padding:5px 4px;">إجمالي الجملة</th>
         <th style="padding:5px 4px;">إجمالي البيع</th>
-        <th style="padding:5px 4px;">الربح</th>
+        <th style="padding:5px 4px;">الربح الصافي</th>
       </tr></thead>
       <tbody>${rowsHtml}</tbody>
       <tfoot><tr style="background:#f2f2f2; font-weight:bold;">
@@ -3598,7 +3639,7 @@ function renderProfitsReport(){
       </tr></tfoot>
     </table>
     <div style="margin-top:10px; padding:10px; background:#e9f7ef; border-radius:8px; font-weight:bold; color:#1e8a5f;">
-      💰 مجموع الأرباح الكلي: ${fmtMoney(grandProfit)} د.ع
+      💰 إجمالي ربحك الصافي: ${fmtMoney(grandProfit)} د.ع
     </div>
     <div style="margin-top:8px; padding:10px; background:#eef1ec; border-radius:8px; font-size:12.5px; color:#333;">
       🛒 إجمالي البيع: <b>${fmtMoney(totalRetail)}</b> د.ع
