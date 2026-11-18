@@ -1014,8 +1014,11 @@ function shopName(){
   const el = document.querySelector('.brand .shop');
   return el ? el.textContent.trim() : '';
 }
+function normDigits(t){
+  return String(t||'').replace(/[٠-٩]/g,c=>c.charCodeAt(0)-0x0660).replace(/[۰-۹]/g,c=>c.charCodeAt(0)-0x06F0);
+}
 function toWhatsAppNumber(phone){
-  let p = (phone||'').replace(/[^\d+]/g,'');
+  let p = normDigits(phone).replace(/[^\d+]/g,'');
   if(p.startsWith('+')) p = p.slice(1);
   else if(p.startsWith('00')) p = p.slice(2);
   else if(p.startsWith('0')) p = '964'+p.slice(1); // Iraqi local format → international
@@ -2231,7 +2234,7 @@ function bindForm(sub){
     const data = {
       name: document.getElementById('f_name').value.trim(),
       nameEn: document.getElementById('f_nameEn').value.trim(),
-      phone: document.getElementById('f_phone').value.trim(),
+      phone: normDigits(document.getElementById('f_phone').value).replace(/[^\d+]/g,''),
       lineType: document.getElementById('f_lineType').value,
       subType: document.getElementById('f_subType').value,
       routerCode: document.getElementById('f_routerCode').value.trim(),
@@ -2268,6 +2271,7 @@ function bindForm(sub){
       activeId = newSub.id;
     }
     await saveState();
+    if(data.phone) showSavedToast('✅ انحفظ الرقم: '+data.phone);
     if(isNewSub){
       // After finishing and saving a brand-new receipt, don't leave it open on screen —
       // deselect it so the main panel goes back to the empty state and the subscriber
@@ -3109,8 +3113,9 @@ function extractRowsFromEarthlinkBlocks(raw){
     const dm = b.match(/\d{1,2}\/\d{1,2}\/\d{4}\s+\d{1,2}:\d{2}\s*(AM|PM)/i);
     const rf = b.match(/Last Refill[ \t]*:[ \t]*(today|(\d+)[ \t]*days?[ \t]*ago)/i);
     const acc = b.match(/Acc\. Name[ \t]*:[ \t]*([^\n]+)/i);
-    const mob = b.match(/^[ \t]*Mobile[ \t]*:[ \t]*(07\d{9})/mi);
-    const mob2 = b.match(/^[ \t]*Mobile 2[ \t]*:[ \t]*(07\d{9})/mi);
+    const pickMob = (re)=>{ const m = normDigits(b).match(re); if(!m) return ''; let d = m[1].replace(/[^\d]/g,''); if(d.startsWith('964')) d = '0'+d.slice(3); return /^07\d{9}$/.test(d) ? d : ''; };
+    const mob = pickMob(/^[ \t]*Mobile[ \t]*:[ \t]*(\+?[\d \-]{10,18})/mi);
+    const mob2 = pickMob(/^[ \t]*Mobile[ \t]*2[ \t]*:[ \t]*(\+?[\d \-]{10,18})/mi);
     // يقبل: "2 Unpaid" أو "Unpaid" أو "Not Paid" = مو مسدد، و"Paid"/"All Paid" = مسدد
     const payLine = (b.match(/Payment[ \t]*:[ \t]*([^\n]*)/i)||[])[1] || '';
     const unpN = payLine.match(/(\d+)[ \t]*(?:Unpaid|Not[ \t]*Paid)/i);
@@ -3122,7 +3127,7 @@ function extractRowsFromEarthlinkBlocks(raw){
       expiry: dm ? dm[0] : '',
       refillDays: rf ? (rf[2] ? Number(rf[2]) : 0) : null,
       accName: acc ? acc[1].trim() : '',
-      mobile: mob ? mob[1] : (mob2 ? mob2[1] : ''),
+      mobile: mob || mob2 || '',
       unpaid: unp ? Number(unp[1]) : 0,
       userNotes: un ? un[1].trim() : ''
     });
