@@ -133,6 +133,7 @@
   }
   .search:focus{outline:2px solid var(--teal); outline-offset:1px;}
 
+  .subs-close{width:100%; margin:6px 0; padding:8px; border:1px solid #cfc7b8; background:#f3efe6; color:#5b5346; border-radius:8px; font-family:Tajawal,sans-serif; font-size:13px; font-weight:700; cursor:pointer;}
   .list{
     flex:1;
     overflow-y:auto;
@@ -625,7 +626,7 @@ async function cloudLogout(){
   <div class="sidebar">
     <div class="brand">
       <div class="brand-top">
-        <div class="shop">قاسم الاسدي للانترنت</div>
+        <div class="shop" id="shopToggle" style="cursor:pointer;" title="اضغط لفتح/إغلاق قائمة المشتركين">قاسم الاسدي للانترنت <span id="subsArrow" style="font-size:12px;">▲</span></div>
         <div style="display:flex; align-items:center; gap:6px; flex-shrink:0;">
           <div class="sub-count-badge" id="subCountBadge" title="عدد المشتركين">0</div>
           <button class="add-btn" id="btnLogout" style="background:#888; font-size:12px; padding:6px 10px; width:auto; margin:0;">🚪 خروج</button>
@@ -638,26 +639,24 @@ async function cloudLogout(){
       </div>
     </div>
     <button class="add-btn" id="btnNew">+ مشترك جديد</button>
-    <button class="add-btn" id="btnSaveAll" style="background:var(--gold);">💾 حفظ جميع المشتركين</button>
     <div style="display:flex; gap:6px;">
       <button class="add-btn" id="btnExport" style="flex:1; background:var(--teal-dark); font-size:12.5px; padding:9px 6px;">⬇️ تصدير نسخة</button>
       <button class="add-btn" id="btnImport" style="flex:1; background:var(--teal-dark); font-size:12.5px; padding:9px 6px;">⬆️ استيراد نسخة</button>
       <input type="file" id="importFile" accept="application/json,.json" style="display:none;">
     </div>
     <button class="add-btn" id="btnDeleteOld" style="background:#b3413e; font-size:12.5px; padding:9px 6px;">🗑️ حذف المشتركين القدامى (منتهي أكثر من شهر)</button>
-    <button class="add-btn" id="btnRenewedMsgs" style="background:#25a35a; font-size:13px; padding:10px 6px;">📲 رسائل المجددين <span id="renewedMsgsCount" style="background:#fff; color:#1e7a45; border-radius:999px; padding:0 8px; margin-inline-start:4px; font-weight:800;">0</span></button>
     <button class="add-btn" id="btnProfits" style="background:#1e8a5f; font-size:13px; padding:10px 6px;">💰 الأرباح والديون</button>
     <button class="add-btn" id="btnSectors" style="background:#5b3fa8; font-size:13px; padding:10px 6px;">📡 السكاتر والأبراج</button>
     <div style="display:flex; gap:6px;">
       <button class="add-btn" id="btnEarthlinkOpen" style="flex:1; background:var(--el-blue,#1a56c4); font-size:12.5px; padding:9px 6px;">🌐 فتح صفحة EarthLink</button>
       <button class="add-btn" id="btnEarthlinkResellerApp" style="flex:1; background:var(--el-blue,#1a56c4); font-size:12.5px; padding:9px 6px;">📲 فتح تطبيق وكيل ايرثلنك</button>
     </div>
-    <button class="add-btn" id="btnQasmSubscribers" style="display:block; width:100%; background:var(--el-pink,#d81b60);">👥 مشتركين قاسم الاسدي</button>
     <div style="display:flex; gap:6px;">
       <button class="add-btn" id="btnEarthlinkPaste" style="flex:1; background:var(--teal); font-size:12.5px; padding:9px 6px;">📋 لصق نص ودمج</button>
       <button class="add-btn" id="btnEarthlinkUploadHtml" style="flex:1; background:var(--gold); font-size:12.5px; padding:9px 6px;">📁 رفع ملف HTML ودمج</button>
       <input type="file" id="earthlinkHtmlFile" accept=".html,.htm,text/html" style="display:none;">
     </div>
+    <button class="add-btn" id="btnQasmSubscribers" style="display:block; width:100%; background:var(--el-pink,#d81b60);">👥 مشتركين قاسم الاسدي</button>
 
     <div id="earthlinkModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:9999; padding:16px; overflow-y:auto;">
       <div style="background:#fff; border-radius:12px; padding:16px; max-width:520px; margin:20px auto;">
@@ -708,8 +707,13 @@ async function cloudLogout(){
     </div>
 
     <div id="remindersBanner"></div>
-    <input class="search" id="search" placeholder="بحث بالاسم أو الهاتف...">
-    <div class="list" id="list"></div>
+    <button type="button" id="btnRenewedMsgs" style="width:100%; text-align:right; background:#e8f5ec; border:1px solid #25a35a; color:#1e7a45; border-radius:9px; padding:9px 12px; font-family:'Tajawal',sans-serif; font-weight:700; font-size:12.5px; cursor:pointer; margin-bottom:6px;">📲 رسالة للمشتركين المجددين <span id="renewedMsgsCount" style="background:#1e7a45; color:#fff; border-radius:999px; padding:0 8px; margin-inline-start:4px; font-weight:800;">0</span></button>
+    <div id="subsBox">
+      <button type="button" class="subs-close" id="subsCloseTop">▲ إغلاق قائمة المشتركين</button>
+      <input class="search" id="search" placeholder="بحث بالاسم أو الهاتف...">
+      <div class="list" id="list"></div>
+      <button type="button" class="subs-close" id="subsCloseBottom">▲ إغلاق قائمة المشتركين</button>
+    </div>
   </div>
 
   <!-- ===== Main ===== -->
@@ -1813,6 +1817,22 @@ function payBoxHtml(){
   </div>`;
 }
 
+function daysLineHtml(sub){
+  if(!sub.expiryDate) return '';
+  const h = hoursLeft(sub);
+  const dayWord = n => n===1 ? 'يوم واحد' : n===2 ? 'يومين' : (n<=10 ? n+' أيام' : n+' يوم');
+  let txt, col;
+  if(h >= 0){
+    const d = Math.floor(h/24);
+    txt = d<1 ? '⏳ باقي لك أقل من يوم وينتهي اشتراكك' : `⏳ باقي لك ${dayWord(d)} وينتهي اشتراكك`;
+    col = '#8a5a00';
+  } else {
+    const d = Math.floor(-h/24);
+    txt = d<1 ? '⚠️ اشتراكك منتهي من اليوم' : `⚠️ اشتراكك منتهي من ${dayWord(d)}`;
+    col = '#c33f3f';
+  }
+  return `<div style="font-weight:700; color:${col}; margin-bottom:8px;">${txt}</div>`;
+}
 function cardTemplate(sub, kind){
   const shop = shopName() || 'قاسم الاسدي للانترنت';
   if(kind === 'debt'){
@@ -1826,6 +1846,7 @@ function cardTemplate(sub, kind){
         <div class="rc-icon">🔴</div>
         <div class="rc-greeting">عزيزي المشترك ${escapeHtml(sub.name)}</div>
         <div class="rc-body">
+          ${daysLineHtml(sub)}
           تاريخ الاشتراك: <b>${fmtDateTime(sub.subscriptionDate, sub.expiryTime||sub.subscriptionTime)}</b><br>
           تاريخ انتهاء الاشتراك: <b>${fmtDateTime(sub.expiryDate, sub.expiryTime)}</b><br>
           يوجد بذمتكم دين لم يسدد بمبلغ: <b>${fmtMoney(remaining)} د.ع</b>
@@ -1846,7 +1867,9 @@ function cardTemplate(sub, kind){
         <div class="rc-greeting">عزيزي المشترك ${escapeHtml(sub.name)}</div>
         <div class="rc-body">
           تم تجديد اشتراككم بنجاح 🎉<br>
+          تاريخ التجديد: <b>${fmtDateTime(sub.subscriptionDate, sub.expiryTime||sub.subscriptionTime)}</b><br>
           الاشتراك ساري لغاية: <b>${fmtDateTime(sub.expiryDate, sub.expiryTime)}</b>
+          ${remainingDebtOf(sub) > 0 ? `<div style="margin-top:10px; padding:8px 10px; border:1.5px solid #c33f3f; background:#fdecec; border-radius:10px; color:#c33f3f; font-weight:700;">🔴 بذمتكم طلب بمبلغ: ${fmtMoney(remainingDebtOf(sub))} د.ع<div style="font-weight:700; margin-top:4px;">نرجو التسديد 🙏</div>${sub.notes ? `<div style="font-weight:500; color:#444; margin-top:4px; font-size:.92em;">📝 ${escapeHtml(sub.notes)}</div>` : ''}</div>` : ''}
         </div>
         <div class="rc-note">نشكر ثقتكم بمكتب ${escapeHtml(shop)}، وأي استفسار نحن بخدمتكم دائماً.</div>
         <div class="rc-footer">شكراً لتعاملكم معنا 🌐</div>
@@ -2950,7 +2973,7 @@ document.getElementById('btnNew').addEventListener('click', ()=>{
   document.getElementById('main').scrollIntoView({ behavior:'smooth', block:'start' });
 });
 document.getElementById('search').addEventListener('input', renderList);
-document.getElementById('btnSaveAll').addEventListener('click', async ()=>{
+const _btnSaveAll = document.getElementById('btnSaveAll'); if(_btnSaveAll) _btnSaveAll.addEventListener('click', async ()=>{
   await saveState();
   showSavedToast(`✅ تم حفظ ${state.subscribers.length} مشترك بنجاح`);
 });
@@ -3013,7 +3036,9 @@ document.getElementById('btnEarthlinkOpen').addEventListener('click', ()=>{
 
 const QASM_SUBSCRIBERS_URL = 'https://qasmalasdy90.github.io/qasm/';
 document.getElementById('btnQasmSubscribers').addEventListener('click', ()=>{
-  location.href = QASM_SUBSCRIBERS_URL;
+  const box = document.getElementById('subsBox');
+  if(box.style.display === 'none'){ window.setSubsOpen(true); box.scrollIntoView({behavior:'smooth', block:'start'}); }
+  else window.setSubsOpen(false);
 });
 
 // يفتح تطبيق "وكيل ايرثلنك" (Earthlink Reseller) نفسه مباشرة لو مثبت
@@ -3295,7 +3320,7 @@ function openRenewedMsgs(){
   const agoTxt = d => { const n = -daysLeft(d); return n===0 ? 'اليوم' : (n===1 ? 'أمس' : `قبل ${n} أيام`); };
   host.innerHTML = `
     <div style="background:#fff; border-radius:14px; padding:16px; max-width:520px; margin:16px auto;">
-      <h3 style="margin:0 0 6px; font-family:'Cairo',sans-serif; color:var(--teal-dark);">📲 رسائل المجددين</h3>
+      <h3 style="margin:0 0 6px; font-family:'Cairo',sans-serif; color:var(--teal-dark);">📲 رسالة للمشتركين المجددين</h3>
       <div style="font-size:12.5px; color:var(--muted); margin-bottom:12px;">المشتركين اللي جددوا خلال آخر ${RENEWED_MSG_DAYS} أيام وما وصلتهم رسالة التجديد.</div>
       ${subs.length ? subs.map(sub=>`
         <div style="border:1px solid var(--line); border-radius:10px; padding:10px; margin-bottom:8px; display:flex; align-items:center; gap:8px;">
@@ -3667,6 +3692,24 @@ function renderProfitsReport(){
 }
 
 loadState();
+
+// ---------- فتح/إغلاق قائمة المشتركين ----------
+(function(){
+  function setSubs(open){
+    const box=document.getElementById('subsBox'), ar=document.getElementById('subsArrow');
+    if(!box) return;
+    box.style.display = open ? '' : 'none';
+    if(ar) ar.textContent = open ? '▲' : '▼';
+    const pb = document.getElementById('btnQasmSubscribers');
+    if(pb) pb.textContent = open ? '👥 مشتركين قاسم الاسدي ▲' : '👥 مشتركين قاسم الاسدي ▼';
+  }
+  window.setSubsOpen = setSubs;
+  setSubs(false);
+  function isOpen(){ const b=document.getElementById('subsBox'); return b && b.style.display!=='none'; }
+  document.getElementById('shopToggle').addEventListener('click', ()=> setSubs(!isOpen()));
+  document.getElementById('subsCloseTop').addEventListener('click', ()=> setSubs(false));
+  document.getElementById('subsCloseBottom').addEventListener('click', ()=>{ setSubs(false); window.scrollTo({top:0, behavior:'smooth'}); });
+})();
 </script>
 </body>
 </html>
